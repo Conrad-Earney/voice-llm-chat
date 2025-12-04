@@ -3,6 +3,12 @@
 # source .venv/bin/activate
 # python run_voice_chat.py
 
+from src.config import ensure_directories_exist
+
+# Automatically prepare runtime directories when any part of src is imported
+ensure_directories_exist()
+
+
 from src.conversation import ConversationManager
 
 def main():
