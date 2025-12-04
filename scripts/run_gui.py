@@ -3,6 +3,15 @@
 # source .venv/bin/activate
 # python gui.py
 
+from src.config import ensure_directories_exist
+
+# Automatically prepare runtime directories when any part of src is imported
+ensure_directories_exist()
+
+from src.asr_whisper import stop_asr
+import atexit
+atexit.register(stop_asr)
+
 import threading
 import tkinter as tk
 from tkinter import ttk
@@ -42,36 +51,28 @@ def gui():
         set_status("Thinking", "blue")
 
         def worker():
-            # Move rec.stop() OFF the GUI thread
             audio = rec.stop()
-
-            # Heavy backend work
             text, reply, outpath = convo.run_turn_with_audio(audio)
-
-            # Back to GUI thread
             root.after(0, lambda: finalize_turn(text, reply, outpath))
 
         threading.Thread(target=worker).start()
 
     # --- finalize after worker thread returns ---
     def finalize_turn(text, reply, outpath):
-        # Update text boxes immediately
         user_text.delete("1.0", tk.END)
         user_text.insert(tk.END, text)
 
         ai_text.delete("1.0", tk.END)
         ai_text.insert(tk.END, reply)
 
-        # Show speaking status before TTS starts
         set_status("Speaking", "purple")
 
         def tts_worker():
-            if outpath:   # None if "(no speech detected)"
+            if outpath:
                 speak(reply, outpath)
             root.after(0, lambda: set_status("Ready", "green"))
 
         threading.Thread(target=tts_worker).start()
-
 
     # --- button setup ---
     button = ttk.Button(root, text="Hold to Talk")
@@ -79,8 +80,33 @@ def gui():
     button.bind("<ButtonRelease-1>", on_release)
     button.pack(pady=20)
 
-    root.mainloop()
+    def shutdown():
+        print("Shutting down...")
+        try:
+            stop_asr()
+        except:
+            pass
+        try:
+            rec.stop()
+        except:
+            pass
+        root.destroy()
+        print("Clean exit.")
+
+    # Close window → clean shutdown
+    root.protocol("WM_DELETE_WINDOW", shutdown)
+
+    # Catch ctrl+c → clean shutdown
+    try:
+        root.mainloop()
+    except KeyboardInterrupt:
+        shutdown()
 
 
 if __name__ == "__main__":
-    gui()
+    # Redundant but useful safety net:
+    try:
+        gui()
+    except KeyboardInterrupt:
+        stop_asr()
+        print("Force shutdown by user.")
