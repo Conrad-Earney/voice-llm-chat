@@ -18,7 +18,7 @@ from tkinter import ttk
 
 from src.conversation import ConversationManager
 from src.audio_io import Recorder
-from src.tts_engine import speak
+from src.tts_engine import speak, stop_tts
 
 
 def gui():
@@ -27,13 +27,54 @@ def gui():
     root = tk.Tk()
     root.title("Voice Chat")
 
-    # --- UI elements ---
-    user_text = tk.Text(root, height=3, width=60)
-    ai_text = tk.Text(root, height=3, width=60)
-    status_label = ttk.Label(root, text="Ready", foreground="green")
+    # --- Make window fullscreen ---
+    root.attributes("-fullscreen", True)
 
-    user_text.pack(padx=10, pady=5)
-    ai_text.pack(padx=10, pady=5)
+    # --- Escape to exit full screen, only for developing ---
+    root.bind("<Escape>", lambda e: root.attributes("-fullscreen", False))  #todo: remove this eventually
+
+     # --- adding a 'container' to centre GUI elements on screen ---
+    container = tk.Frame(root)
+    container.place(relx=0.5, rely=0.5, anchor="center")
+
+    # --- user text with scrollbar ---
+    user_frame = tk.Frame(container)
+
+    user_scroll = tk.Scrollbar(user_frame)
+    user_scroll.pack(side="right", fill="y")
+
+    user_text = tk.Text(
+        user_frame,
+        width=80,
+        height=8,
+        wrap="word",
+        yscrollcommand=user_scroll.set
+    )
+    user_text.pack(side="left", fill="both", expand=True)
+
+    user_scroll.config(command=user_text.yview)
+    user_frame.pack(pady=10)
+
+    # --- ai text with scrollbar ---
+    ai_frame = tk.Frame(container)
+
+    ai_scroll = tk.Scrollbar(ai_frame)
+    ai_scroll.pack(side="right", fill="y")
+
+    ai_text = tk.Text(
+        ai_frame,
+        width=80,
+        height=12,
+        wrap="word",
+        yscrollcommand=ai_scroll.set
+    )
+    ai_text.pack(side="left", fill="both", expand=True)
+
+    ai_scroll.config(command=ai_text.yview)
+    ai_frame.pack(pady=10)
+
+    # --- status indicator ---
+    status_label = ttk.Label(container, text="Ready", foreground="green")
     status_label.pack(pady=10)
 
     # --- status updater ---
@@ -55,7 +96,7 @@ def gui():
             text, reply, outpath = convo.run_turn_with_audio(audio)
             root.after(0, lambda: finalize_turn(text, reply, outpath))
 
-        threading.Thread(target=worker).start()
+        threading.Thread(target=worker, daemon=True).start()
 
     # --- finalize after worker thread returns ---
     def finalize_turn(text, reply, outpath):
@@ -72,25 +113,45 @@ def gui():
                 speak(reply, outpath)
             root.after(0, lambda: set_status("Ready", "green"))
 
-        threading.Thread(target=tts_worker).start()
+        threading.Thread(target=tts_worker, daemon=True).start()
 
-    # --- button setup ---
-    button = ttk.Button(root, text="Hold to Talk")
+    # --- hold-to-talk button ---
+    button = ttk.Button(container, text="Hold to Talk")
     button.bind("<ButtonPress-1>", on_press)
     button.bind("<ButtonRelease-1>", on_release)
     button.pack(pady=20)
 
+    root.shutting_down = False
+
     def shutdown():
+        if root.shutting_down:
+            return
+        root.shutting_down = True
+
         print("Shutting down...")
+
+        try:
+            stop_tts()
+        except Exception:
+            pass
+
         try:
             stop_asr()
-        except:
+        except Exception:
             pass
+
         try:
+            rec.is_recording = False 
             rec.stop()
-        except:
+        except Exception:
             pass
-        root.destroy()
+
+        try:
+            root.destroy()
+            root.quit()
+        except Exception:
+            pass
+
         print("Clean exit.")
 
     # Close window → clean shutdown
