@@ -5,7 +5,7 @@
 
 from src.config import ensure_directories_exist
 
-# Automatically prepare runtime directories when any part of src is imported
+# create sessions directory if it does not already exist
 ensure_directories_exist()
 
 from src.asr_whisper import stop_asr
