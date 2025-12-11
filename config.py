@@ -1,6 +1,7 @@
 import os
 
-REQUIRED_DIRS = ["sessions", "output", "logs"]
+
+REQUIRED_DIRS = ["sessions"]
 
 def ensure_directories_exist():
     for d in REQUIRED_DIRS:

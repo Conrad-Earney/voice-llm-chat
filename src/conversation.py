@@ -1,7 +1,8 @@
 import os
 import json
 from datetime import datetime
-from src import audio_io, asr_whisper, llm_ollama, tts_engine
+
+from src import audio_io, asr_whisper, llm_ollama
 
 
 class ConversationManager:
@@ -9,112 +10,88 @@ class ConversationManager:
         self.history = []
         self.turn = 0
 
+        # --- session directory ---
         base = os.path.join(os.path.dirname(__file__), "..", "sessions")
-        if not os.path.exists(base):
-            os.makedirs(base)
+        os.makedirs(base, exist_ok=True)
 
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.session_dir = os.path.join(base, "session_" +   ts)
+        self.session_dir = os.path.join(base, f"session_{ts}")
         os.makedirs(self.session_dir)
 
         self.log_path = os.path.join(self.session_dir, "conversation_log.jsonl")
 
-    def _log_turn(self, record):
+    # ---------------------------------------------------------
+    # Logging
+    # ---------------------------------------------------------
+    def _log(self, record):
         record["timestamp"] = datetime.now().isoformat()
         with open(self.log_path, "a") as f:
             json.dump(record, f)
             f.write("\n")
 
-    def process_turn(self):
+    # ---------------------------------------------------------
+    # Phase 1 — Transcription only
+    # ---------------------------------------------------------
+    def transcribe_only(self, audio):
+        """
+        Saves input wav + returns transcription text.
+        """
         self.turn += 1
+        print(f"[ASR] transcribe_only start, turn {self.turn}")
 
-        # 1) Record
-        audio = audio_io.record_while_space(max_duration=30)
-
-        # 2) Save input audio
         input_audio_path = os.path.join(
-            self.session_dir, "input_turn_{:03d}.wav".format(self.turn)
+            self.session_dir, f"input_turn_{self.turn:03d}.wav"
         )
+        print(f"[ASR] Saving input WAV to: {input_audio_path}")
         audio_io.save_wav(audio, input_audio_path)
+        print("[ASR] Input WAV saved")
 
-        # 3) ASR
-        text = asr_whisper.transcribe(audio, 16000).strip()
-        if not text:
-            print("User: [no speech detected]")
-            self._log_turn({
-                "turn": self.turn,
-                "user_text": "",
-                "assistant_text": "",
-                "input_audio_path": input_audio_path,
-                "output_audio_path": None,
-            })
-            return
+        print("[ASR] Calling asr_whisper.transcribe…")
+        text = asr_whisper.transcribe(audio)
+        print(f"[ASR] Raw transcription: {text!r}")
+        text = text.strip()
+        print(f"[ASR] Stripped transcription: {text!r}")
 
-        print("User:", text)
-
-        # 4) LLM
-        reply = llm_ollama.generate_reply(text, self.history)
-        print("AI:", reply, "\n")
-
-        # 5) TTS (and save output audio file)
-        output_audio_path = os.path.join(
-            self.session_dir, "output_turn_{:03d}.aiff".format(self.turn)
-        )
-        tts_engine.speak(reply, output_path=output_audio_path)
-
-        # 6) Update history
-        self.history.append({"role": "user", "content": text})
-        self.history.append({"role": "assistant", "content": reply})
-
-        # 7) Log everything
-        self._log_turn({
+        self._log({
             "turn": self.turn,
             "user_text": text,
-            "assistant_text": reply,
+            "assistant_text": None,
             "input_audio_path": input_audio_path,
-            "output_audio_path": output_audio_path,
+            "output_audio_path": None
         })
+        print("[ASR] Logged transcription")
 
-    def run_turn_with_audio(self, audio):
-        self.turn += 1
+        return text
 
-        # Save input audio
-        input_audio_path = os.path.join(
-            self.session_dir, "input_turn_{:03d}.wav".format(self.turn)
-        )
-        audio_io.save_wav(audio, input_audio_path)
-
-        # ASR
-        text = asr_whisper.transcribe(audio, 16000).strip()
-        print("User:", text)
-
-        # Handle empty speech
+    # ---------------------------------------------------------
+    # Phase 2 — LLM reply only
+    # ---------------------------------------------------------
+    def reply_only(self, text):
+        """
+        Generates reply, updates history, and determines output path.
+        Speaking is handled by GUI.
+        """
         if not text:
             reply = "(no speech detected)"
-            output_audio_path = None
-
         else:
-            # LLM response
             reply = llm_ollama.generate_reply(text, self.history)
-            print("AI:", reply)
 
-            # Generate TTS output path but DON'T SPEAK here
-            output_audio_path = os.path.join(
-                self.session_dir, "output_turn_{:03d}.aiff".format(self.turn)
-            )
+        # Prepare output audio path (used by TTS)
+        output_audio_path = os.path.join(
+            self.session_dir, f"output_turn_{self.turn:03d}.aiff"
+        )
 
-        # Update history
+        # Update conversation history
         self.history.append({"role": "user", "content": text})
         self.history.append({"role": "assistant", "content": reply})
 
-        # Log turn
-        self._log_turn({
+        # Update the JSON log entry
+        self._log({
             "turn": self.turn,
             "user_text": text,
             "assistant_text": reply,
-            "input_audio_path": input_audio_path,
-            "output_audio_path": output_audio_path,
+            "input_audio_path": f"input_turn_{self.turn:03d}.wav",
+            "output_audio_path": output_audio_path
         })
 
-        # Return values to GUI so GUI controls TTS
-        return text, reply, output_audio_path
+        return reply, output_audio_path

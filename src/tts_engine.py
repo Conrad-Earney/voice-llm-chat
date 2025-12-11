@@ -1,25 +1,35 @@
 import subprocess
 import os
 
+def speak(text, output_path):
+    """Render TTS to a file and play it."""
 
-def speak(text, output_path=None):
     text = (text or "").strip()
     if not text:
-        print("[TTS skipped: empty text]")
+        print("[TTS] Skipping: empty text")
         return
-    
-    voice = "Samantha"
 
-    if output_path:
-        if not output_path.endswith(".aiff"):
-            output_path += ".aiff"
+    if not output_path.endswith(".aiff"):
+        output_path += ".aiff"
 
-        print("[TTS (say) rendering to {}]".format(output_path))
-        rc = subprocess.call(["say", "-v", voice, "-o", output_path, text])
-        if rc == 0 and os.path.exists(output_path):
-            subprocess.call(["afplay", output_path])
-        print("[TTS (say) finished]")
+    out_dir = os.path.dirname(output_path)
+    if out_dir and not os.path.isdir(out_dir):
+        print(f"[TTS ERROR] Output directory does not exist: {out_dir}")
+        return
+
+    print(f"[TTS] Rendering and playing: {output_path}")
+
+    # Render
+    try:
+        subprocess.check_call(["say", "-v", "Samantha (Enhanced)", "-o", output_path, text])
+    except subprocess.CalledProcessError as e:
+        print(f"[TTS ERROR] say failed: {e}")
+        return
+
+    # Play
+    try:
+        subprocess.check_call(["afplay", output_path])
+    except subprocess.CalledProcessError as e:
+        print(f"[TTS ERROR] afplay failed: {e}")
     else:
-        print("[TTS (say) about to speak {} chars]".format(len(text)))
-        subprocess.call(["say", "-v", voice, text])
-        print("[TTS (say) finished]")
+        print("[TTS] Complete")

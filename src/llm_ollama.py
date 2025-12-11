@@ -1,5 +1,5 @@
 import requests
-from src.config import OLLAMA_URL, OLLAMA_MODEL
+from config import OLLAMA_URL, OLLAMA_MODEL
 
 
 def generate_reply(prompt, history=None):
@@ -39,7 +39,7 @@ def generate_reply(prompt, history=None):
 
     # Error path from Ollama (e.g., model missing)
     if "error" in data:
-        raise RuntimeError("Ollama returned error: {}".format(data["error"]))
+        raise RuntimeError(f"Ollama returned error: {data["error"]}")
 
     # Catch-all
-    raise RuntimeError("Unexpected Ollama response structure: {}".format(data))
+    raise RuntimeError(f"Unexpected Ollama response structure: {data}")

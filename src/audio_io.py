@@ -1,27 +1,25 @@
 import sounddevice as sd
 import numpy as np
-import sys
 import wave
-import time
-from pynput import keyboard
-from src.config import SAMPLE_RATE
+from config import SAMPLE_RATE
+
 
 class Recorder:
-    def __init__(self):
+    def __init__(self, debug=False):
         self.frames = []
         self.is_recording = False
         self.stream = None
-
-    def start(self):
-        self.frames = []
-        self.is_recording = True
+        self.debug = debug
 
         def callback(indata, frames, time, status):
+            if status:
+                # Warnings should always be visible
+                print(f"[REC WARNING] {status}")
             if self.is_recording:
+                # Copy is important; indata is reused by sounddevice
                 self.frames.append(indata.copy())
-            else:
-                raise sd.CallbackStop
 
+        self._log("Initialising input stream (open once, keep open)")
         self.stream = sd.InputStream(
             samplerate=SAMPLE_RATE,
             channels=1,
@@ -29,85 +27,72 @@ class Recorder:
             callback=callback,
         )
         self.stream.start()
+        self._log("Input stream started")
+
+    def _log(self, msg):
+        """Internal debug logger."""
+        if self.debug:
+            print(f"[REC] {msg}")
+
+    def _log_error(self, msg):
+        """Errors should always be printed."""
+        print(f"[REC ERROR] {msg}")
+
+    def start(self):
+        self._log("start() called")
+        self.frames = []
+        self.is_recording = True
+        self._log("Recording flag set to True")
 
     def stop(self):
+        self._log("stop() called (only stop capturing, not the stream)")
         self.is_recording = False
 
-        if self.stream:
-            self.stream.stop()
-            self.stream.close()
+        frame_count = len(self.frames) if self.frames is not None else 0
+        self._log(f"Frames collected: {frame_count}")
 
         if not self.frames:
+            self._log("No frames, returning empty audio array")
             return np.zeros((0,), dtype="float32")
 
-        audio = np.concatenate(self.frames, axis=0)
-        return audio.squeeze()
+        try:
+            self._log("Concatenating frames…")
+            audio = np.concatenate(self.frames, axis=0)
+            self._log("Concatenation done")
+        except Exception as e:
+            self._log_error(f"np.concatenate failed: {e!r}")
+            return np.zeros((0,), dtype="float32")
 
-def wait_for_enter_or_quit():
-    sys.stdout.write("Press Enter to speak (or 'q' + Enter to quit): ")
-    sys.stdout.flush()
-    line = sys.stdin.readline()
-    if not line:
-        raise KeyboardInterrupt
-    if line.strip().lower() == "q":
-        raise KeyboardInterrupt
+        audio = audio.squeeze()
+        self._log(f"Returning audio, shape: {getattr(audio, 'shape', None)}")
+        return audio
 
-def record_fixed(duration=5):
-    wait_for_enter_or_quit()
-    print("Recording for {} seconds...".format(duration))
-    audio = sd.rec(
-        int(duration * SAMPLE_RATE),
-        samplerate=SAMPLE_RATE,
-        channels=1,
-        dtype="float32",
-    )
-    sd.wait()
-    return np.squeeze(audio)
+    def shutdown(self):
+        """Stop and close the underlying stream once, when the app exits."""
+        self._log("shutdown() called – stopping/closing stream")
+        self.is_recording = False
 
-def record_while_space(max_duration=30):
-    print("Hold SPACE to talk, release to stop.")
-    frames = []
-    recording = False
-    start = None
+        if self.stream is None:
+            self._log("No stream to shut down")
+            return
 
-    def on_press(key):
-        nonlocal recording, start
-        if key == keyboard.Key.space and not recording:
-            recording = True
-            start = time.time()
-            print("Recording...")
+        try:
+            self.stream.stop()
+            self._log("stream.stop() completed in shutdown()")
+        except Exception as e:
+            self._log_error(f"stream.stop() in shutdown() raised: {e!r}")
 
-    def on_release(key):
-        nonlocal recording
-        if key == keyboard.Key.space:
-            recording = False
-            print("Stopped recording.")
+        try:
+            self.stream.close()
+            self._log("stream.close() completed in shutdown()")
+        except Exception as e:
+            self._log_error(f"stream.close() in shutdown() raised: {e!r}")
 
-    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
-    listener.start()
+        self.stream = None
+        self._log("Stream set to None")
 
-    def callback(indata, frames_count, time_info, status):
-        if recording:
-            frames.append(indata.copy())
-        elif frames and not recording:
-            raise sd.CallbackStop
-        if start and time.time() - start > max_duration:
-            raise sd.CallbackStop
-
-    with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32",
-                        callback=callback):
-        while listener.is_alive():
-            time.sleep(0.05)
-            if not recording and frames:
-                break
-    listener.stop()
-
-    if not frames:
-        return np.zeros((0,), dtype="float32")
-    return np.concatenate(frames, axis=0).squeeze()
 
 def save_wav(audio, path):
-    # audio: 1D float32 in [-1, 1]
     audio_i16 = (np.clip(audio, -1.0, 1.0) * 32767).astype(np.int16)
     with wave.open(path, "wb") as wf:
         wf.setnchannels(1)
