@@ -1,7 +1,8 @@
-import sounddevice as sd
 import numpy as np
 import wave
 from config import SAMPLE_RATE
+import sounddevice as sd
+import subprocess
 
 
 class Recorder:
@@ -99,3 +100,12 @@ def save_wav(audio, path):
         wf.setsampwidth(2)  # 16-bit
         wf.setframerate(SAMPLE_RATE)
         wf.writeframes(audio_i16.tobytes())
+
+def get_audio_duration(path):
+    try:
+        info = subprocess.check_output(["afinfo", path], text=True)
+        for line in info.splitlines():
+            if "estimated duration" in line.lower():
+                return float(line.split()[-2])
+    except Exception:
+        return None

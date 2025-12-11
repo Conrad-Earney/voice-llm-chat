@@ -4,6 +4,7 @@ from tkinter import ttk
 
 from src.conversation import ConversationManager
 from src.audio_io import Recorder
+from src.audio_io import get_audio_duration
 from src.tts_engine import speak
 from config import ensure_directories_exist
 
@@ -117,6 +118,18 @@ def gui():
         def tts_worker():
             if outpath:
                 speak(reply, outpath)
+
+                # Now that the AIFF file exists, measure its duration
+                try:
+                    ai_duration = get_audio_duration(outpath)
+                    print(f"[TTS] AI audio duration: {ai_duration:.3f} sec")
+                except Exception as e:
+                    print(f"[TTS ERROR] Could not get AI audio duration: {e!r}")
+                    ai_duration = None
+
+                # Finalise logging for this turn
+                convo.finalize_turn_log(ai_duration)
+
             root.after(0, lambda: set_status("Ready", "green"))
 
         threading.Thread(target=tts_worker, daemon=True).start()
