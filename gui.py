@@ -3,17 +3,23 @@ import tkinter as tk
 from tkinter import ttk
 
 from src.conversation import ConversationManager
-from src.audio_io import Recorder
-from src.audio_io import get_audio_duration
+from src.audio_io import Recorder, get_audio_duration
 from src.tts_engine import speak
 from config import ensure_directories_exist
 
+from src.logger import debug, exc
+
 ensure_directories_exist()
+
+TAG_UI = "UI"
+TAG_WORKER = "WORKER"
+TAG_TTS = "TTS"
+TAG_LOG = "LOG"
 
 
 def gui():
     convo = ConversationManager()
-    rec = Recorder(debug=False)
+    rec = Recorder()
 
     root = tk.Tk()
     root.title("Voice Chat")
@@ -107,10 +113,9 @@ def gui():
         nonlocal is_listening
 
         if turn_in_flight:
-            print("[UI] Ignoring press: turn already in flight")
+            debug(TAG_UI, "Ignoring press: turn already in flight")
             return
 
-        print("Button press")
         is_listening = True
         set_status("Listening…", "red")
         rec.start()
@@ -120,42 +125,31 @@ def gui():
 
         # Ignore releases that happen when we never started listening
         if not is_listening:
-            print("[UI] Ignoring release: not currently listening")
+            debug(TAG_UI, "Ignoring release: not currently listening")
             return
 
         if turn_in_flight:
-            print("[UI] Ignoring release: turn already in flight")
+            debug(TAG_UI, "Ignoring release: turn already in flight")
             return
 
-        print("Button release")
         is_listening = False
 
         set_turn_in_flight(True)
         set_status("Processing…", "blue")
 
-        print("[UI] Calling rec.stop()…")
         audio = rec.stop()
-        print("[UI] rec.stop() returned")
 
         def worker():
             try:
-                print("[WORKER] Starting worker thread")
-                print(
-                    f"[WORKER] audio type: {type(audio)}, shape/len: "
-                    f"{getattr(audio, 'shape', None) or (len(audio) if audio is not None else 'None')}"
-                )
-
                 turn_id, text = convo.transcribe_only(audio)
-                print(f"[WORKER] transcription: {text!r}")
                 display_text = text if text else "(no speech detected)"
                 root.after(0, lambda: show_user(display_text))
 
                 reply, outpath = convo.reply_only(turn_id, text)
-                print(f"[WORKER] AI reply: {reply!r}, outpath: {outpath!r}")
                 root.after(0, lambda: handle_ai_reply(turn_id, reply, outpath))
 
             except Exception as e:
-                print(f"[WORKER ERROR] {e!r}")
+                exc(TAG_WORKER, e, msg="Worker thread failed")
                 root.after(0, lambda: set_status("Ready", "green"))
                 root.after(0, lambda: set_turn_in_flight(False))
 
@@ -169,7 +163,7 @@ def gui():
             try:
                 convo.finalize_turn_log(turn_id, None)
             except Exception as e:
-                print(f"[LOG ERROR] {e!r}")
+                exc(TAG_LOG, e, msg="finalize_turn_log failed (no TTS path)")
 
             set_status("Ready", "green")
             set_turn_in_flight(False)
@@ -185,28 +179,27 @@ def gui():
                 try:
                     ai_duration = get_audio_duration(outpath)
                     if ai_duration is not None:
-                        print(f"[TTS] AI audio duration: {ai_duration:.3f} sec")
+                        debug(TAG_TTS, f"AI audio duration: {ai_duration:.3f} sec")
                     else:
-                        print("[TTS] AI audio duration: None")
+                        debug(TAG_TTS, "AI audio duration: None")
                 except Exception as e:
-                    print(f"[TTS ERROR] Could not get AI audio duration: {e!r}")
+                    exc(TAG_TTS, e, msg="Could not get AI audio duration")
                     ai_duration = None
 
                 convo.finalize_turn_log(turn_id, ai_duration)
 
             except Exception as e:
-                print(f"[TTS WORKER ERROR] {e!r}")
+                exc(TAG_TTS, e, msg="TTS worker failed")
                 # Even on TTS failure, finalize log so the turn completes
                 try:
                     convo.finalize_turn_log(turn_id, None)
                 except Exception as e2:
-                    print(f"[LOG ERROR] {e2!r}")
+                    exc(TAG_LOG, e2, msg="finalize_turn_log failed after TTS failure")
 
             root.after(0, lambda: set_status("Ready", "green"))
             root.after(0, lambda: set_turn_in_flight(False))
 
         threading.Thread(target=tts_worker, daemon=True).start()
-
 
     # Bind button events
     button.bind("<ButtonPress-1>", on_press)

@@ -5,6 +5,12 @@ from datetime import datetime
 from config import SAMPLE_RATE, MIN_UTTERANCE_SEC
 from src import audio_io, asr_whisper, llm_ollama
 
+from src.logger import debug, error, exc
+
+TAG_ASR = "ASR"
+TAG_LOG = "LOG"
+TAG_LLM = "LLM"
+
 
 class ConversationManager:
     def __init__(self):
@@ -37,16 +43,16 @@ class ConversationManager:
         self.turn += 1
         turn_id = self.turn
 
-        print(f"[ASR] transcribe_only start, turn {turn_id}")
+        debug(TAG_ASR, f"transcribe_only start, turn {turn_id}")
 
         # Compute participant duration first so we can short-circuit
         n_samples = len(audio) if audio is not None else 0
         participant_duration_sec = float(n_samples) / float(SAMPLE_RATE)
-        print(f"[ASR] Participant duration (sec): {participant_duration_sec:.3f}")
+        debug(TAG_ASR, f"Participant duration (sec): {participant_duration_sec:.3f}")
 
         # Too short / empty: skip saving WAV + skip Whisper
         if audio is None or n_samples == 0 or participant_duration_sec < MIN_UTTERANCE_SEC:
-            print("[ASR] Audio too short/empty; skipping Whisper")
+            debug(TAG_ASR, "Audio too short/empty; skipping Whisper")
 
             text = ""  # keep logs clean; GUI can display "(no speech detected)"
 
@@ -62,16 +68,16 @@ class ConversationManager:
 
         # Save input audio (only if we're going to transcribe)
         input_audio_path = os.path.join(self.session_dir, f"input_turn_{turn_id:03d}.wav")
-        print(f"[ASR] Saving input WAV to: {input_audio_path}")
+        debug(TAG_ASR, f"Saving input WAV to: {input_audio_path}")
         audio_io.save_wav(audio, input_audio_path)
-        print("[ASR] Input WAV saved")
+        debug(TAG_ASR, "Input WAV saved")
 
         # Transcribe
-        print("[ASR] Calling asr_whisper.transcribe…")
+        debug(TAG_ASR, "Calling asr_whisper.transcribe…")
         text = asr_whisper.transcribe(audio)
-        print(f"[ASR] Raw transcription: {text!r}")
+        debug(TAG_ASR, f"Raw transcription: {text!r}")
         text = text.strip()
-        print(f"[ASR] Stripped transcription: {text!r}")
+        debug(TAG_ASR, f"Stripped transcription: {text!r}")
 
         self._pending_turn = {
             "turn": turn_id,
@@ -82,7 +88,6 @@ class ConversationManager:
         }
 
         return turn_id, text
-
 
     # ---------------------------------------------------------
     # Phase 2 — LLM reply only
@@ -106,7 +111,8 @@ class ConversationManager:
                 reply = llm_ollama.generate_reply(text, self.history)
                 outpath = output_audio_path
             except Exception as e:
-                print("[LLM ERROR] {}".format(repr(e)))
+                # Keeps behavior the same (friendly message), but now we also get a traceback.
+                exc(TAG_LLM, e, msg="generate_reply failed")
                 reply = "(LLM error — see terminal.)"
                 outpath = None
 
@@ -127,7 +133,6 @@ class ConversationManager:
 
         return reply, outpath
 
-
     # ---------------------------------------------------------
     # Phase 3 — Finalise log once AI audio exists
     # ---------------------------------------------------------
@@ -137,16 +142,19 @@ class ConversationManager:
         Writes a single JSON line for the completed turn.
         """
         if not self._pending_turn:
-            print(f"[LOG] No pending turn to finalise (turn {turn_id})")
+            error(TAG_LOG, "No pending turn to finalise (turn {turn_id})")
             return
 
         if self._pending_turn.get("turn") != turn_id:
-            print(f"[LOG] Pending turn mismatch: pending={self._pending_turn.get('turn')} got={turn_id}")
+            error(
+                TAG_LOG,
+                f"Pending turn mismatch: pending={self._pending_turn.get('turn')} got={turn_id}"
+            )
             return
 
         self._pending_turn["ai_duration_sec"] = ai_duration_sec
 
         self._log(self._pending_turn)
-        print(f"[LOG] Logged turn {self._pending_turn['turn']}")
+        debug(TAG_LOG, f"Logged turn {self._pending_turn["turn"]}")
 
         self._pending_turn = None
