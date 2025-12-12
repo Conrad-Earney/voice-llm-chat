@@ -81,70 +81,139 @@ def gui():
         status.update_idletasks()
 
     # --------------------------------------
+    # Button (define early so we can disable/enable it)
+    # --------------------------------------
+    button = ttk.Button(container, text="Hold to Talk")
+    button.pack(pady=20)
+
+    # --------------------------------------
+    # Single-turn gating (prevents overlapping turns)
+    # --------------------------------------
+    turn_in_flight = False
+    is_listening = False
+
+    def set_turn_in_flight(flag):
+        nonlocal turn_in_flight
+        turn_in_flight = flag
+        try:
+            button.state(["disabled"] if flag else ["!disabled"])
+        except Exception:
+            pass
+
+    # --------------------------------------
     # Recording logic
     # --------------------------------------
     def on_press(event):
+        nonlocal is_listening
+
+        if turn_in_flight:
+            print("[UI] Ignoring press: turn already in flight")
+            return
+
         print("Button press")
+        is_listening = True
         set_status("Listening…", "red")
         rec.start()
 
     def on_release(event):
+        nonlocal is_listening
+
+        # Ignore releases that happen when we never started listening
+        if not is_listening:
+            print("[UI] Ignoring release: not currently listening")
+            return
+
+        if turn_in_flight:
+            print("[UI] Ignoring release: turn already in flight")
+            return
+
         print("Button release")
+        is_listening = False
+
+        set_turn_in_flight(True)
         set_status("Processing…", "blue")
+
         print("[UI] Calling rec.stop()…")
         audio = rec.stop()
         print("[UI] rec.stop() returned")
 
         def worker():
-            print("[WORKER] Starting worker thread")
-            print(f"[WORKER] audio type: {type(audio)}, shape/len: "
-                f"{getattr(audio, 'shape', None) or len(audio) if audio is not None else 'None'}")
+            try:
+                print("[WORKER] Starting worker thread")
+                print(
+                    f"[WORKER] audio type: {type(audio)}, shape/len: "
+                    f"{getattr(audio, 'shape', None) or (len(audio) if audio is not None else 'None')}"
+                )
 
-            text = convo.transcribe_only(audio)
-            print(f"[WORKER] transcription: {text!r}")
-            root.after(0, lambda: show_user(text))
+                turn_id, text = convo.transcribe_only(audio)
+                print(f"[WORKER] transcription: {text!r}")
+                display_text = text if text else "(no speech detected)"
+                root.after(0, lambda: show_user(display_text))
 
-            reply, outpath = convo.reply_only(text)
-            print(f"[WORKER] AI reply: {reply!r}, outpath: {outpath!r}")
-            root.after(0, lambda: handle_ai_reply(reply, outpath))
+                reply, outpath = convo.reply_only(turn_id, text)
+                print(f"[WORKER] AI reply: {reply!r}, outpath: {outpath!r}")
+                root.after(0, lambda: handle_ai_reply(turn_id, reply, outpath))
+
+            except Exception as e:
+                print(f"[WORKER ERROR] {e!r}")
+                root.after(0, lambda: set_status("Ready", "green"))
+                root.after(0, lambda: set_turn_in_flight(False))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def handle_ai_reply(reply, outpath):
+    def handle_ai_reply(turn_id, reply, outpath):
         show_ai(reply)
+
+        # If there's no outpath, we are not doing TTS (empty input or LLM error).
+        if not outpath:
+            try:
+                convo.finalize_turn_log(turn_id, None)
+            except Exception as e:
+                print(f"[LOG ERROR] {e!r}")
+
+            set_status("Ready", "green")
+            set_turn_in_flight(False)
+            return
 
         set_status("Speaking…", "purple")
 
         def tts_worker():
-            if outpath:
+            try:
                 speak(reply, outpath)
 
                 # Now that the AIFF file exists, measure its duration
                 try:
                     ai_duration = get_audio_duration(outpath)
-                    print(f"[TTS] AI audio duration: {ai_duration:.3f} sec")
+                    if ai_duration is not None:
+                        print(f"[TTS] AI audio duration: {ai_duration:.3f} sec")
+                    else:
+                        print("[TTS] AI audio duration: None")
                 except Exception as e:
                     print(f"[TTS ERROR] Could not get AI audio duration: {e!r}")
                     ai_duration = None
 
-                # Finalise logging for this turn
-                convo.finalize_turn_log(ai_duration)
+                convo.finalize_turn_log(turn_id, ai_duration)
+
+            except Exception as e:
+                print(f"[TTS WORKER ERROR] {e!r}")
+                # Even on TTS failure, finalize log so the turn completes
+                try:
+                    convo.finalize_turn_log(turn_id, None)
+                except Exception as e2:
+                    print(f"[LOG ERROR] {e2!r}")
 
             root.after(0, lambda: set_status("Ready", "green"))
+            root.after(0, lambda: set_turn_in_flight(False))
 
         threading.Thread(target=tts_worker, daemon=True).start()
 
-    # --------------------------------------
-    # Button
-    # --------------------------------------
-    button = ttk.Button(container, text="Hold to Talk")
+
+    # Bind button events
     button.bind("<ButtonPress-1>", on_press)
     button.bind("<ButtonRelease-1>", on_release)
-    button.pack(pady=20)
 
     # Cleanup
     def on_closing():
-        # Ensure recorder is cleaned up before exiting
         rec.shutdown()
         root.destroy()
 
@@ -153,8 +222,8 @@ def gui():
     try:
         root.mainloop()
     finally:
-        # Safety net in case something else kills the app
         rec.shutdown()
+
 
 if __name__ == "__main__":
     gui()
