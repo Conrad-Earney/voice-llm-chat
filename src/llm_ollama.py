@@ -31,7 +31,7 @@ def generate_reply(prompt, history=None):
         return "(Ollama timed out — try again.)"
     except requests.ConnectionError as e:
         error(TAG, f"Could not reach Ollama: {e!r}")
-        return "(Couldn’t reach Ollama — is it running?)"
+        return "(Couldn't reach Ollama — is it running?)"
     except requests.RequestException as e:
         error(TAG, f"Request failed: {e!r}")
         return "(Ollama request failed — see terminal for details.)"

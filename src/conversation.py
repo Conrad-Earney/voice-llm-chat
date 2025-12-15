@@ -2,10 +2,11 @@ import os
 import json
 from datetime import datetime
 
-from config import SAMPLE_RATE, MIN_UTTERANCE_SEC
+from config import SAMPLE_RATE, MIN_UTTERANCE_SEC, ROBOT_OUTBOX_DIRNAME, ensure_session_robot_dirs
 from src import audio_io, asr_whisper, llm_ollama
 
 from src.logger import debug, error, exc
+from src.robot_job import write_input_job
 
 TAG_ASR = "ASR"
 TAG_LOG = "LOG"
@@ -23,7 +24,8 @@ class ConversationManager:
 
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.session_dir = os.path.join(base, f"session_{ts}")
-        os.makedirs(self.session_dir)
+        os.makedirs(self.session_dir, exist_ok=True)
+        ensure_session_robot_dirs(self.session_dir)
 
         self.log_path = os.path.join(self.session_dir, "conversation_log.jsonl")
 
@@ -50,34 +52,25 @@ class ConversationManager:
         participant_duration_sec = float(n_samples) / float(SAMPLE_RATE)
         debug(TAG_ASR, f"Participant duration (sec): {participant_duration_sec:.3f}")
 
+        input_audio_path = None
+
         # Too short / empty: skip saving WAV + skip Whisper
         if audio is None or n_samples == 0 or participant_duration_sec < MIN_UTTERANCE_SEC:
             debug(TAG_ASR, "Audio too short/empty; skipping Whisper")
-
             text = ""  # keep logs clean; GUI can display "(no speech detected)"
+        else:
+            # Save input audio (only if we're going to transcribe)
+            input_audio_path = os.path.join(self.session_dir, f"input_turn_{turn_id:03d}.wav")
+            debug(TAG_ASR, f"Saving input WAV to: {input_audio_path}")
+            audio_io.save_wav(audio, input_audio_path)
+            debug(TAG_ASR, "Input WAV saved")
 
-            self._pending_turn = {
-                "turn": turn_id,
-                "participant_text": text,
-                "ai_text": None,
-                "participant_duration_sec": participant_duration_sec,
-                "ai_duration_sec": None,
-            }
-
-            return turn_id, text
-
-        # Save input audio (only if we're going to transcribe)
-        input_audio_path = os.path.join(self.session_dir, f"input_turn_{turn_id:03d}.wav")
-        debug(TAG_ASR, f"Saving input WAV to: {input_audio_path}")
-        audio_io.save_wav(audio, input_audio_path)
-        debug(TAG_ASR, "Input WAV saved")
-
-        # Transcribe
-        debug(TAG_ASR, "Calling asr_whisper.transcribe…")
-        text = asr_whisper.transcribe(audio)
-        debug(TAG_ASR, f"Raw transcription: {text!r}")
-        text = text.strip()
-        debug(TAG_ASR, f"Stripped transcription: {text!r}")
+            # Transcribe
+            debug(TAG_ASR, "Calling asr_whisper.transcribe…")
+            text = asr_whisper.transcribe(audio)
+            debug(TAG_ASR, f"Raw transcription: {text!r}")
+            text = text.strip()
+            debug(TAG_ASR, f"Stripped transcription: {text!r}")
 
         self._pending_turn = {
             "turn": turn_id,
@@ -86,6 +79,20 @@ class ConversationManager:
             "participant_duration_sec": participant_duration_sec,
             "ai_duration_sec": None,
         }
+
+        try:
+            outbox_dir = os.path.join(self.session_dir, ROBOT_OUTBOX_DIRNAME)
+            write_input_job(
+                outbox_dir=outbox_dir,
+                turn_id=turn_id,
+                robot_name="clas",  # temporary for now
+                participant_text=text,
+                input_audio_path=input_audio_path,
+                participant_duration_sec=participant_duration_sec,
+                extra={"source": "voice-llm-chat"}
+            )
+        except Exception as e:
+            error(TAG_ASR, "write_input_job failed: {}".format(repr(e)))
 
         return turn_id, text
 
