@@ -27,7 +27,7 @@ def speak(text, output_path):
     # Render
     try:
         subprocess.check_call(
-            ["say", "-v", "Samantha (Enhanced)", "-o", output_path, text]
+            ["say", "-v", "Zoe (Premium)", "-o", output_path, text]
         )
     except subprocess.CalledProcessError as e:
         error(TAG, f"say failed: {e}")

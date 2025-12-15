@@ -63,7 +63,7 @@ def generate_reply(prompt, history=None):
 
     # Error path from Ollama (e.g., model missing)
     if "error" in data:
-        raise RuntimeError(f"Ollama returned error: {data['error']}")
+        raise RuntimeError(f"Ollama returned error: {data["error"]}")
 
     # Catch-all
     raise RuntimeError(f"Unexpected Ollama response structure: {data}")
