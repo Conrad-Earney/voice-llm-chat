@@ -5,7 +5,7 @@ from tkinter import ttk
 from src.conversation import ConversationManager
 from src.audio_io import Recorder, get_audio_duration
 from src.tts_engine import speak
-from config import ensure_directories_exist
+from config import ensure_directories_exist, USE_NAO_BACKEND, WAIT_FOR_NAO_DONE
 
 from src.logger import debug, exc
 
@@ -145,6 +145,35 @@ def gui():
                 display_text = text if text else "(no speech detected)"
                 root.after(0, lambda: show_user(display_text))
 
+                # ---------------------------------------------------------
+                # NAO backend mode: do NOT generate reply or speak locally
+                # ---------------------------------------------------------
+                if USE_NAO_BACKEND:
+                    # The input job is already written in transcribe_only().
+                    # Optionally wait for the NAO worker to produce a done.json.
+                    if WAIT_FOR_NAO_DONE:
+                        try:
+                            done = convo.wait_for_nao_done(turn_id)
+                        except Exception as e:
+                            exc(TAG_WORKER, e, msg="wait_for_nao_done failed")
+                            done = None
+
+                        if done and done.get("ok"):
+                            segs = done.get("ai_segments_list") or []
+                            reply_text = " ".join([s[0] for s in segs if s and s[0]])
+                            if not reply_text:
+                                reply_text = "(robot spoke)"
+                        else:
+                            reply_text = "(robot worker timeout / error — see terminal)"
+                    else:
+                        reply_text = "(sent to robot)"
+
+                    root.after(0, lambda: handle_ai_reply(turn_id, reply_text, None))
+                    return
+
+                # ---------------------------------------------------------
+                # Local mode (existing behavior)
+                # ---------------------------------------------------------
                 reply, outpath = convo.reply_only(turn_id, text)
                 root.after(0, lambda: handle_ai_reply(turn_id, reply, outpath))
 
@@ -156,7 +185,33 @@ def gui():
         threading.Thread(target=worker, daemon=True).start()
 
     def handle_ai_reply(turn_id, reply, outpath):
+        """
+        UI handler for the AI side of a turn.
+
+        Two modes:
+        - Local mode (USE_NAO_BACKEND=False): uses local TTS pipeline (existing behavior).
+        - NAO mode   (USE_NAO_BACKEND=True): assumes the NAO worker will speak; no local TTS.
+            'reply' should already be the display text you want (e.g., joined segments from .done.json).
+        """
         show_ai(reply)
+
+        # ---------------------------------------------------------
+        # NAO backend mode: DO NOT run local TTS
+        # ---------------------------------------------------------
+        if USE_NAO_BACKEND:
+            try:
+                # We don't have local audio duration in NAO mode (unless you later add it to done.json)
+                convo.finalize_turn_log(turn_id, None)
+            except Exception as e:
+                exc(TAG_LOG, e, msg="finalize_turn_log failed (NAO mode)")
+
+            set_status("Ready", "green")
+            set_turn_in_flight(False)
+            return
+
+        # ---------------------------------------------------------
+        # Local mode: existing behavior (TTS on this machine)
+        # ---------------------------------------------------------
 
         # If there's no outpath, we are not doing TTS (empty input or LLM error).
         if not outpath:

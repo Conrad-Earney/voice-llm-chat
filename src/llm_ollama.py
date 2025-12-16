@@ -5,17 +5,23 @@ from src.logger import debug, error
 TAG = "OLLAMA"
 
 
-def generate_reply(prompt, history=None):
+def generate_reply(prompt, history=None, system_prompt=None, max_messages=None):
     if history is None:
         history = []
 
-    messages = history + [{"role": "user", "content": prompt}]
+    msgs = []
 
-    payload = {
-        "model": OLLAMA_MODEL,
-        "messages": messages,
-        "stream": False,
-    }
+    if system_prompt:
+        msgs.append({"role": "system", "content": system_prompt})
+
+    # Keep only the most recent max_messages from history
+    if max_messages is not None and max_messages > 0:
+        history = history[-max_messages:]
+
+    msgs.extend(history)
+    msgs.append({"role": "user", "content": prompt})
+
+    payload = {"model": OLLAMA_MODEL, "messages": msgs, "stream": False}
 
     url = f"{OLLAMA_URL.rstrip('/')}/api/chat"
     debug(TAG, f"POST {url} (model={OLLAMA_MODEL})")

@@ -1,8 +1,9 @@
 import os
 import json
+import time
 from datetime import datetime
 
-from config import SAMPLE_RATE, MIN_UTTERANCE_SEC, ROBOT_OUTBOX_DIRNAME, ensure_session_robot_dirs
+from config import ensure_session_robot_dirs, SAMPLE_RATE, MIN_UTTERANCE_SEC, ROBOT_OUTBOX_DIRNAME, NAO_DONE_TIMEOUT_SEC, ROBOT_INBOX_DIRNAME, DEFAULT_ROBOT_NAME 
 from src import audio_io, asr_whisper, llm_ollama
 
 from src.logger import debug, error, exc
@@ -26,6 +27,10 @@ class ConversationManager:
         self.session_dir = os.path.join(base, f"session_{ts}")
         os.makedirs(self.session_dir, exist_ok=True)
         ensure_session_robot_dirs(self.session_dir)
+
+        current_path = os.path.join(base, "CURRENT_SESSION.txt")
+        with open(current_path, "w") as f:
+            f.write(self.session_dir)
 
         self.log_path = os.path.join(self.session_dir, "conversation_log.jsonl")
 
@@ -74,8 +79,8 @@ class ConversationManager:
 
         self._pending_turn = {
             "turn": turn_id,
-            "participant_text": text,
-            "ai_text": None,
+            "user": text,
+            "assistant": None,
             "participant_duration_sec": participant_duration_sec,
             "ai_duration_sec": None,
         }
@@ -115,7 +120,11 @@ class ConversationManager:
             outpath = None
         else:
             try:
-                reply = llm_ollama.generate_reply(text, self.history)
+                reply = llm_ollama.generate_reply(
+                    text,
+                    self.history,
+                    system_prompt="You are a concise, friendly conversation partner"
+                )
                 outpath = output_audio_path
             except Exception as e:
                 # Keeps behavior the same (friendly message), but now we also get a traceback.
@@ -123,16 +132,16 @@ class ConversationManager:
                 reply = "(LLM error — see terminal.)"
                 outpath = None
 
-        self.history.append({"role": "participant", "content": text})
+        self.history.append({"role": "user", "content": text})
         if outpath is not None:  # only on successful LLM call
-            self.history.append({"role": "ai", "content": reply})
+            self.history.append({"role": "assistant", "content": reply})
 
         if self._pending_turn and self._pending_turn.get("turn") == turn_id:
             self._pending_turn["ai_text"] = reply
         else:
             self._pending_turn = {
                 "turn": turn_id,
-                "participant_text": text,
+                "user": text,
                 "ai_text": reply,
                 "participant_duration_sec": None,
                 "ai_duration_sec": None,
@@ -165,3 +174,22 @@ class ConversationManager:
         debug(TAG_LOG, f"Logged turn {self._pending_turn["turn"]}")
 
         self._pending_turn = None
+
+    # ---------------------------------------------------------
+    # NAO-ONLY METHOD
+    # ---------------------------------------------------------
+    def wait_for_nao_done(self, turn_id, timeout_sec=None, poll_sec=0.05):
+        if timeout_sec is None:
+            timeout_sec = NAO_DONE_TIMEOUT_SEC
+
+        inbox_dir = os.path.join(self.session_dir, ROBOT_INBOX_DIRNAME)
+        done_path = os.path.join(inbox_dir, "turn_{:04d}.done.json".format(int(turn_id)))
+
+        t0 = time.time()
+        while time.time() - t0 < timeout_sec:
+            if os.path.isfile(done_path):
+                with open(done_path, "r") as f:
+                    return json.load(f)
+            time.sleep(poll_sec)
+
+        return None

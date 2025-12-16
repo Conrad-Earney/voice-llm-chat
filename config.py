@@ -3,10 +3,6 @@ import os
 
 REQUIRED_DIRS = ["sessions"]
 
-ROBOT_OUTBOX_DIRNAME = "robot_outbox"
-ROBOT_INBOX_DIRNAME = "robot_inbox"
-DEFAULT_ROBOT_NAME = "clas"
-
 def ensure_directories_exist():
     for d in REQUIRED_DIRS:
         os.makedirs(d, exist_ok=True)
@@ -23,3 +19,11 @@ SAMPLE_RATE = 16000
 CONNECT_TIMEOUT_SEC = 3.0
 READ_TIMEOUT_SEC = 120.0
 MIN_UTTERANCE_SEC = 0.2
+
+ROBOT_OUTBOX_DIRNAME = "robot_outbox"
+ROBOT_INBOX_DIRNAME = "robot_inbox"
+DEFAULT_ROBOT_NAME = "clas"
+
+WAIT_FOR_NAO_DONE = True
+NAO_DONE_TIMEOUT_SEC = 30.0
+USE_NAO_BACKEND = True
