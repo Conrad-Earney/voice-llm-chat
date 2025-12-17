@@ -27,6 +27,8 @@ def speak(text, output_path):
     # Render
     try:
         subprocess.check_call(
+            # Zoe (Premium) - largest, female, not bad.
+            # Tom (Enhanced) - decent, speaks slower.
             ["say", "-v", "Zoe (Premium)", "-o", output_path, text]
         )
     except subprocess.CalledProcessError as e:

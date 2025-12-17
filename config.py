@@ -26,4 +26,6 @@ DEFAULT_ROBOT_NAME = "clas"
 
 WAIT_FOR_NAO_DONE = True
 NAO_DONE_TIMEOUT_SEC = 30.0
+
+# True = Robot chat. False = Computer chat.
 USE_NAO_BACKEND = True
