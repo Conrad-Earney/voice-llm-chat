@@ -33,6 +33,8 @@ class ConversationManager:
             f.write(self.session_dir)
 
         self.log_path = os.path.join(self.session_dir, "conversation_log.jsonl")
+        self.outbox_dir = os.path.join(self.session_dir, ROBOT_OUTBOX_DIRNAME)
+        self.inbox_dir = os.path.join(self.session_dir, ROBOT_INBOX_DIRNAME)
 
     def _log(self, record):
         with open(self.log_path, "a") as f:
@@ -86,9 +88,8 @@ class ConversationManager:
         }
 
         try:
-            outbox_dir = os.path.join(self.session_dir, ROBOT_OUTBOX_DIRNAME)
             write_input_job(
-                outbox_dir=outbox_dir,
+                outbox_dir=self.outbox_dir,
                 turn_id=turn_id,
                 robot_name="clas",  # temporary for now
                 participant_text=text,
@@ -182,8 +183,7 @@ class ConversationManager:
         if timeout_sec is None:
             timeout_sec = NAO_DONE_TIMEOUT_SEC
 
-        inbox_dir = os.path.join(self.session_dir, ROBOT_INBOX_DIRNAME)
-        done_path = os.path.join(inbox_dir, "turn_{:04d}.done.json".format(int(turn_id)))
+        done_path = os.path.join(self.inbox_dir, "turn_{:04d}.done.json".format(int(turn_id)))
 
         t0 = time.time()
         while time.time() - t0 < timeout_sec:
