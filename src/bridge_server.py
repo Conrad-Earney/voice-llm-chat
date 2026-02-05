@@ -42,7 +42,8 @@ def stop():
     "turn_id": int(turn_id),
     "transcript": text or "",
     "session_dir": convo.session_dir,
-    "outbox_dir": convo.outbox_dir,   # <-- add this
+    "to_robot_dir": convo.to_robot_dir,
+    "from_robot_dir": convo.from_robot_dir,
     })
 
 

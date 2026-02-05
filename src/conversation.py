@@ -33,8 +33,12 @@ class ConversationManager:
             f.write(self.session_dir)
 
         self.log_path = os.path.join(self.session_dir, "conversation_log.jsonl")
-        self.outbox_dir = os.path.join(self.session_dir, ROBOT_OUTBOX_DIRNAME)
-        self.inbox_dir = os.path.join(self.session_dir, ROBOT_INBOX_DIRNAME)
+
+        # Jobs TO robot (_input.json)
+        self.to_robot_dir = os.path.join(self.session_dir, ROBOT_INBOX_DIRNAME)
+
+        # Results FROM robot (.done.json)
+        self.from_robot_dir = os.path.join(self.session_dir, ROBOT_OUTBOX_DIRNAME)
 
     def _log(self, record):
         with open(self.log_path, "a") as f:
@@ -89,13 +93,12 @@ class ConversationManager:
 
         try:
             write_input_job(
-                outbox_dir=self.outbox_dir,
+                inbox_dir=self.to_robot_dir,
                 turn_id=turn_id,
-                robot_name="clas",  # temporary for now
+                robot_name=DEFAULT_ROBOT_NAME,
                 participant_text=text,
                 input_audio_path=input_audio_path,
                 participant_duration_sec=participant_duration_sec,
-                extra={"source": "voice-llm-chat"}
             )
         except Exception as e:
             error(TAG_ASR, "write_input_job failed: {}".format(repr(e)))
@@ -183,7 +186,7 @@ class ConversationManager:
         if timeout_sec is None:
             timeout_sec = NAO_DONE_TIMEOUT_SEC
 
-        done_path = os.path.join(self.inbox_dir, "turn_{:04d}.done.json".format(int(turn_id)))
+        done_path = os.path.join(self.from_robot_dir, "turn_{:04d}_output.json".format(int(turn_id)))
 
         t0 = time.time()
         while time.time() - t0 < timeout_sec:
