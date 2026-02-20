@@ -29,3 +29,6 @@ NAO_DONE_TIMEOUT_SEC = 30.0
 
 # True = Robot chat. False = Computer chat.
 USE_NAO_BACKEND = True
+
+COMPUTER = "macmini"
+AUDIO_INPUT_NAME = "Scarlett Solo"
