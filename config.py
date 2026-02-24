@@ -92,3 +92,7 @@ NAO_DONE_TIMEOUT_SEC = float(_VOICE_CFG.get("nao_done_timeout_sec", _DEFAULTS["N
 
 # True = Robot chat. False = Computer chat.
 USE_NAO_BACKEND = bool(_VOICE_CFG.get("use_nao_backend", _DEFAULTS["USE_NAO_BACKEND"]))
+
+COMPUTER = "macmini"
+AUDIO_INPUT_NAME = "Scarlett Solo"
+
