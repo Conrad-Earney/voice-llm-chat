@@ -1,5 +1,7 @@
 from flask import Flask, jsonify, request
 import threading
+import logging
+import os
 
 from src.audio_io import Recorder
 from src.conversation import ConversationManager
@@ -49,4 +51,6 @@ def stop():
 
 if __name__ == "__main__":
     # Listen on LAN so the robot can hit it
+    if os.getenv("BRIDGE_VERBOSE", "0") != "1":
+        logging.getLogger("werkzeug").setLevel(logging.ERROR)
     app.run(host="0.0.0.0", port=5055, threaded=True)
