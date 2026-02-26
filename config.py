@@ -15,7 +15,6 @@ _DEFAULTS = {
     "MIN_UTTERANCE_SEC": 0.2,
     "ROBOT_OUTBOX_DIRNAME": "robot_outbox",
     "ROBOT_INBOX_DIRNAME": "robot_inbox",
-    "DEFAULT_ROBOT_NAME": "clas",
     "WAIT_FOR_NAO_DONE": True,
     "NAO_DONE_TIMEOUT_SEC": 30.0,
     "USE_NAO_BACKEND": True,
@@ -54,7 +53,7 @@ def _load_voice_profile_section(default_project_id="original"):
     with io.open(profile_path, "r", encoding="utf-8") as f:
         profile = json.load(f)
 
-    return project_id, (profile.get("voice_llm_chat") or {})
+    return project_id, (profile.get("voice_llm_chat") or {}), (profile.get("nao_worker") or {})
 
 
 def ensure_directories_exist():
@@ -69,10 +68,11 @@ def ensure_session_robot_dirs(session_dir):
 
 
 try:
-    ACTIVE_PROJECT_ID, _VOICE_CFG = _load_voice_profile_section()
+    ACTIVE_PROJECT_ID, _VOICE_CFG, _NAO_CFG = _load_voice_profile_section()
 except Exception as e:
     ACTIVE_PROJECT_ID = "defaults"
     _VOICE_CFG = {}
+    _NAO_CFG = {}
     print("WARN: Falling back to built-in defaults ({}).".format(e))
 
 OLLAMA_MODEL = _VOICE_CFG.get("ollama_model", _DEFAULTS["OLLAMA_MODEL"])
@@ -85,7 +85,9 @@ MIN_UTTERANCE_SEC = float(_VOICE_CFG.get("min_utterance_sec", _DEFAULTS["MIN_UTT
 
 ROBOT_OUTBOX_DIRNAME = _VOICE_CFG.get("robot_outbox_dirname", _DEFAULTS["ROBOT_OUTBOX_DIRNAME"])
 ROBOT_INBOX_DIRNAME = _VOICE_CFG.get("robot_inbox_dirname", _DEFAULTS["ROBOT_INBOX_DIRNAME"])
-DEFAULT_ROBOT_NAME = _VOICE_CFG.get("default_robot_name", _DEFAULTS["DEFAULT_ROBOT_NAME"])
+if "robot_name" not in _NAO_CFG:
+    raise RuntimeError("Missing nao_worker.robot_name in active project profile.")
+DEFAULT_ROBOT_NAME = _NAO_CFG["robot_name"]
 
 WAIT_FOR_NAO_DONE = bool(_VOICE_CFG.get("wait_for_nao_done", _DEFAULTS["WAIT_FOR_NAO_DONE"]))
 NAO_DONE_TIMEOUT_SEC = float(_VOICE_CFG.get("nao_done_timeout_sec", _DEFAULTS["NAO_DONE_TIMEOUT_SEC"]))
@@ -95,4 +97,3 @@ USE_NAO_BACKEND = bool(_VOICE_CFG.get("use_nao_backend", _DEFAULTS["USE_NAO_BACK
 
 COMPUTER = "macmini"
 AUDIO_INPUT_NAME = "Scarlett Solo"
-
