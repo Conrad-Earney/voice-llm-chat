@@ -1,9 +1,19 @@
 import os
 import json
 import time
+import numpy as np
 from datetime import datetime
 
-from config import ensure_session_robot_dirs, SAMPLE_RATE, MIN_UTTERANCE_SEC, ROBOT_OUTBOX_DIRNAME, NAO_DONE_TIMEOUT_SEC, ROBOT_INBOX_DIRNAME, DEFAULT_ROBOT_NAME 
+from config import (
+    ensure_session_robot_dirs,
+    SAMPLE_RATE,
+    MIN_UTTERANCE_SEC,
+    SILENCE_RMS_THRESHOLD,
+    ROBOT_OUTBOX_DIRNAME,
+    NAO_DONE_TIMEOUT_SEC,
+    ROBOT_INBOX_DIRNAME,
+    DEFAULT_ROBOT_NAME,
+)
 from src import audio_io, asr_whisper, llm_ollama
 
 from src.logger import debug, error, exc
@@ -62,6 +72,8 @@ class ConversationManager:
         n_samples = len(audio) if audio is not None else 0
         participant_duration_sec = float(n_samples) / float(SAMPLE_RATE)
         debug(TAG_ASR, f"Participant duration (sec): {participant_duration_sec:.3f}")
+        audio_rms = float(np.sqrt(np.mean(np.square(audio)))) if n_samples > 0 else 0.0
+        debug(TAG_ASR, f"Participant RMS energy: {audio_rms:.6f}")
 
         input_audio_path = None
 
@@ -69,6 +81,12 @@ class ConversationManager:
         if audio is None or n_samples == 0 or participant_duration_sec < MIN_UTTERANCE_SEC:
             debug(TAG_ASR, "Audio too short/empty; skipping Whisper")
             text = ""  # keep logs clean; GUI can display "(no speech detected)"
+        elif audio_rms < SILENCE_RMS_THRESHOLD:
+            debug(
+                TAG_ASR,
+                f"Audio below silence RMS threshold ({audio_rms:.6f} < {SILENCE_RMS_THRESHOLD:.6f}); skipping Whisper",
+            )
+            text = ""
         else:
             # Save input audio (only if we're going to transcribe)
             input_audio_path = os.path.join(self.session_dir, f"input_turn_{turn_id:03d}.wav")

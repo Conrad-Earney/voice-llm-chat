@@ -13,6 +13,7 @@ _DEFAULTS = {
     "CONNECT_TIMEOUT_SEC": 3.0,
     "READ_TIMEOUT_SEC": 120.0,
     "MIN_UTTERANCE_SEC": 0.2,
+    "SILENCE_RMS_THRESHOLD": 0.005,
     "ROBOT_OUTBOX_DIRNAME": "robot_outbox",
     "ROBOT_INBOX_DIRNAME": "robot_inbox",
     "WAIT_FOR_NAO_DONE": True,
@@ -82,6 +83,9 @@ SAMPLE_RATE = int(_VOICE_CFG.get("sample_rate", _DEFAULTS["SAMPLE_RATE"]))
 CONNECT_TIMEOUT_SEC = float(_VOICE_CFG.get("connect_timeout_sec", _DEFAULTS["CONNECT_TIMEOUT_SEC"]))
 READ_TIMEOUT_SEC = float(_VOICE_CFG.get("read_timeout_sec", _DEFAULTS["READ_TIMEOUT_SEC"]))
 MIN_UTTERANCE_SEC = float(_VOICE_CFG.get("min_utterance_sec", _DEFAULTS["MIN_UTTERANCE_SEC"]))
+SILENCE_RMS_THRESHOLD = float(
+    _VOICE_CFG.get("silence_rms_threshold", _DEFAULTS["SILENCE_RMS_THRESHOLD"])
+)
 
 ROBOT_OUTBOX_DIRNAME = _VOICE_CFG.get("robot_outbox_dirname", _DEFAULTS["ROBOT_OUTBOX_DIRNAME"])
 ROBOT_INBOX_DIRNAME = _VOICE_CFG.get("robot_inbox_dirname", _DEFAULTS["ROBOT_INBOX_DIRNAME"])
