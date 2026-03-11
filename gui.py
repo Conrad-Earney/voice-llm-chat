@@ -3,9 +3,9 @@ import tkinter as tk
 from tkinter import ttk
 
 from src.conversation import ConversationManager
-from src.audio_io import Recorder, get_audio_duration
-from src.tts_engine import speak
-from config import ensure_directories_exist, USE_NAO_BACKEND, WAIT_FOR_NAO_DONE
+from src.audio_io import Recorder
+from src.response_modes import LocalResponseAdapter, RobotResponseAdapter
+from config import ensure_directories_exist, USE_NAO_BACKEND, WAIT_FOR_NAO_DONE, validate_mode_settings
 
 from src.logger import debug, exc
 
@@ -13,12 +13,16 @@ ensure_directories_exist()
 
 TAG_UI = "UI"
 TAG_WORKER = "WORKER"
-TAG_TTS = "TTS"
-TAG_LOG = "LOG"
 
 
 def gui():
-    convo = ConversationManager()
+    validate_mode_settings(robot_enabled=USE_NAO_BACKEND)
+    convo = ConversationManager(robot_enabled=USE_NAO_BACKEND)
+    response_adapter = (
+        RobotResponseAdapter(wait_for_done=WAIT_FOR_NAO_DONE)
+        if USE_NAO_BACKEND
+        else LocalResponseAdapter()
+    )
     rec = Recorder()
 
     root = tk.Tk()
@@ -144,37 +148,7 @@ def gui():
                 turn_id, text = convo.transcribe_only(audio)
                 display_text = text if text else "(no speech detected)"
                 root.after(0, lambda: show_user(display_text))
-
-                # ---------------------------------------------------------
-                # NAO backend mode: do NOT generate reply or speak locally
-                # ---------------------------------------------------------
-                if USE_NAO_BACKEND:
-                    # The input job is already written in transcribe_only().
-                    # Optionally wait for the NAO worker to produce a done.json.
-                    if WAIT_FOR_NAO_DONE:
-                        try:
-                            done = convo.wait_for_nao_done(turn_id)
-                        except Exception as e:
-                            exc(TAG_WORKER, e, msg="wait_for_nao_done failed")
-                            done = None
-
-                        if done and done.get("ok"):
-                            segs = done.get("ai_segments_list") or []
-                            reply_text = " ".join([s[0] for s in segs if s and s[0]])
-                            if not reply_text:
-                                reply_text = "(robot spoke)"
-                        else:
-                            reply_text = "(robot worker timeout / error — see terminal)"
-                    else:
-                        reply_text = "(sent to robot)"
-
-                    root.after(0, lambda: handle_ai_reply(turn_id, reply_text, None))
-                    return
-
-                # ---------------------------------------------------------
-                # Local mode (existing behavior)
-                # ---------------------------------------------------------
-                reply, outpath = convo.reply_only(turn_id, text)
+                reply, outpath = response_adapter.prepare_reply(convo, turn_id, text)
                 root.after(0, lambda: handle_ai_reply(turn_id, reply, outpath))
 
             except Exception as e:
@@ -185,76 +159,21 @@ def gui():
         threading.Thread(target=worker, daemon=True).start()
 
     def handle_ai_reply(turn_id, reply, outpath):
-        """
-        UI handler for the AI side of a turn.
-
-        Two modes:
-        - Local mode (USE_NAO_BACKEND=False): uses local TTS pipeline (existing behavior).
-        - NAO mode   (USE_NAO_BACKEND=True): assumes the NAO worker will speak; no local TTS.
-            'reply' should already be the display text you want (e.g., joined segments from .done.json).
-        """
         show_ai(reply)
+        if outpath:
+            set_status("Speaking…", "purple")
+        else:
+            set_status("Completing…", "blue")
 
-        # ---------------------------------------------------------
-        # NAO backend mode: DO NOT run local TTS
-        # ---------------------------------------------------------
-        if USE_NAO_BACKEND:
+        def completion_worker():
             try:
-                # We don't have local audio duration in NAO mode (unless you later add it to done.json)
-                convo.finalize_turn_log(turn_id, None)
+                response_adapter.complete_turn(convo, turn_id, reply, outpath)
             except Exception as e:
-                exc(TAG_LOG, e, msg="finalize_turn_log failed (NAO mode)")
-
-            set_status("Ready", "green")
-            set_turn_in_flight(False)
-            return
-
-        # ---------------------------------------------------------
-        # Local mode: existing behavior (TTS on this machine)
-        # ---------------------------------------------------------
-
-        # If there's no outpath, we are not doing TTS (empty input or LLM error).
-        if not outpath:
-            try:
-                convo.finalize_turn_log(turn_id, None)
-            except Exception as e:
-                exc(TAG_LOG, e, msg="finalize_turn_log failed (no TTS path)")
-
-            set_status("Ready", "green")
-            set_turn_in_flight(False)
-            return
-
-        set_status("Speaking…", "purple")
-
-        def tts_worker():
-            try:
-                speak(reply, outpath)
-
-                # Now that the AIFF file exists, measure its duration
-                try:
-                    ai_duration = get_audio_duration(outpath)
-                    if ai_duration is not None:
-                        debug(TAG_TTS, f"AI audio duration: {ai_duration:.3f} sec")
-                    else:
-                        debug(TAG_TTS, "AI audio duration: None")
-                except Exception as e:
-                    exc(TAG_TTS, e, msg="Could not get AI audio duration")
-                    ai_duration = None
-
-                convo.finalize_turn_log(turn_id, ai_duration)
-
-            except Exception as e:
-                exc(TAG_TTS, e, msg="TTS worker failed")
-                # Even on TTS failure, finalize log so the turn completes
-                try:
-                    convo.finalize_turn_log(turn_id, None)
-                except Exception as e2:
-                    exc(TAG_LOG, e2, msg="finalize_turn_log failed after TTS failure")
-
+                exc(TAG_WORKER, e, msg="Turn completion failed")
             root.after(0, lambda: set_status("Ready", "green"))
             root.after(0, lambda: set_turn_in_flight(False))
 
-        threading.Thread(target=tts_worker, daemon=True).start()
+        threading.Thread(target=completion_worker, daemon=True).start()
 
     # Bind button events
     button.bind("<ButtonPress-1>", on_press)

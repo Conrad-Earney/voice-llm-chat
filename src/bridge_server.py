@@ -3,6 +3,7 @@ import threading
 import logging
 import os
 
+from config import validate_mode_settings
 from src.audio_io import Recorder
 from src.conversation import ConversationManager
 from src.logger import debug, exc
@@ -11,8 +12,9 @@ TAG = "BRIDGE"
 
 app = Flask(__name__)
 
+validate_mode_settings(robot_enabled=True)
 rec = Recorder()                 # opens stream once (your audio_io.py already does this)
-convo = ConversationManager()    # creates session dir etc.
+convo = ConversationManager(robot_enabled=True)    # creates session dir etc.
 
 _lock = threading.Lock()
 _is_listening = False

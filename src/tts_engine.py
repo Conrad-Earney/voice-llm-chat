@@ -1,6 +1,7 @@
 import subprocess
 import os
 
+from config import TTS_VOICE
 from src.logger import debug, error
 
 TAG = "TTS"
@@ -27,9 +28,7 @@ def speak(text, output_path):
     # Render
     try:
         subprocess.check_call(
-            # Zoe (Premium) - largest, female, not bad.
-            # Tom (Enhanced) - decent, speaks slower.
-            ["say", "-v", "Zoe (Premium)", "-o", output_path, text]
+            ["say", "-v", TTS_VOICE, "-o", output_path, text]
         )
     except subprocess.CalledProcessError as e:
         error(TAG, f"say failed: {e}")

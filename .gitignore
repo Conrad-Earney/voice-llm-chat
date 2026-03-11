@@ -5,6 +5,7 @@ __pycache__/
 
 .DS_Store
 
+local_config.json
 sessions/
 *.wav
 *.aiff

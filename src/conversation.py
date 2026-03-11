@@ -13,8 +13,10 @@ from config import (
     NAO_DONE_TIMEOUT_SEC,
     ROBOT_INBOX_DIRNAME,
     DEFAULT_ROBOT_NAME,
+    ROBOT_ENABLED,
+    validate_mode_settings,
 )
-from src import audio_io, asr_whisper, llm_ollama
+from src import audio_io, asr_whisper, nao_converse
 
 from src.logger import debug, error, exc
 from src.robot_job import write_input_job
@@ -25,10 +27,15 @@ TAG_LLM = "LLM"
 
 
 class ConversationManager:
-    def __init__(self):
+    def __init__(self, robot_enabled=None, robot_name=None):
         self.history = []
         self.turn = 0
         self._pending_turn = None
+        self.robot_enabled = ROBOT_ENABLED if robot_enabled is None else bool(robot_enabled)
+        self.robot_name = robot_name or DEFAULT_ROBOT_NAME
+
+        if self.robot_enabled:
+            validate_mode_settings(robot_enabled=True)
 
         base = os.path.join(os.path.dirname(__file__), "..", "sessions")
         os.makedirs(base, exist_ok=True)
@@ -36,7 +43,8 @@ class ConversationManager:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.session_dir = os.path.join(base, f"session_{ts}")
         os.makedirs(self.session_dir, exist_ok=True)
-        ensure_session_robot_dirs(self.session_dir)
+        if self.robot_enabled:
+            ensure_session_robot_dirs(self.session_dir)
 
         current_path = os.path.join(base, "CURRENT_SESSION.txt")
         with open(current_path, "w") as f:
@@ -45,10 +53,14 @@ class ConversationManager:
         self.log_path = os.path.join(self.session_dir, "conversation_log.jsonl")
 
         # Jobs TO robot (_input.json)
-        self.to_robot_dir = os.path.join(self.session_dir, ROBOT_INBOX_DIRNAME)
+        self.to_robot_dir = None
 
         # Results FROM robot (.done.json)
-        self.from_robot_dir = os.path.join(self.session_dir, ROBOT_OUTBOX_DIRNAME)
+        self.from_robot_dir = None
+
+        if self.robot_enabled:
+            self.to_robot_dir = os.path.join(self.session_dir, ROBOT_INBOX_DIRNAME)
+            self.from_robot_dir = os.path.join(self.session_dir, ROBOT_OUTBOX_DIRNAME)
 
     def _log(self, record):
         with open(self.log_path, "a") as f:
@@ -109,17 +121,18 @@ class ConversationManager:
             "ai_duration_sec": None,
         }
 
-        try:
-            write_input_job(
-                inbox_dir=self.to_robot_dir,
-                turn_id=turn_id,
-                robot_name=DEFAULT_ROBOT_NAME,
-                participant_text=text,
-                input_audio_path=input_audio_path,
-                participant_duration_sec=participant_duration_sec,
-            )
-        except Exception as e:
-            error(TAG_ASR, "write_input_job failed: {}".format(repr(e)))
+        if self.robot_enabled:
+            try:
+                write_input_job(
+                    inbox_dir=self.to_robot_dir,
+                    turn_id=turn_id,
+                    robot_name=self.robot_name,
+                    participant_text=text,
+                    input_audio_path=input_audio_path,
+                    participant_duration_sec=participant_duration_sec,
+                )
+            except Exception as e:
+                error(TAG_ASR, "write_input_job failed: {}".format(repr(e)))
 
         return turn_id, text
 
@@ -142,16 +155,16 @@ class ConversationManager:
             outpath = None
         else:
             try:
-                reply = llm_ollama.generate_reply(
-                    text,
-                    self.history,
-                    system_prompt="You are a concise, friendly conversation partner"
+                reply_data = nao_converse.converse(
+                    prompt=text,
+                    history=self.history,
+                    turn_count=turn_id,
                 )
+                reply = reply_data["spoken_text"]
                 outpath = output_audio_path
             except Exception as e:
-                # Keeps behavior the same (friendly message), but now we also get a traceback.
-                exc(TAG_LLM, e, msg="generate_reply failed")
-                reply = "(LLM error — see terminal.)"
+                exc(TAG_LLM, e, msg="nao_converse failed")
+                reply = "(UQ Py3 converse error — see terminal.)"
                 outpath = None
 
         self.history.append({"role": "user", "content": text})
@@ -201,6 +214,9 @@ class ConversationManager:
     # NAO-ONLY METHOD
     # ---------------------------------------------------------
     def wait_for_nao_done(self, turn_id, timeout_sec=None, poll_sec=0.05):
+        if not self.robot_enabled or not self.from_robot_dir:
+            raise RuntimeError("wait_for_nao_done called while robot mode is disabled.")
+
         if timeout_sec is None:
             timeout_sec = NAO_DONE_TIMEOUT_SEC
 
