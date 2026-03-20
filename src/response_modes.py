@@ -57,6 +57,7 @@ class RobotResponseAdapter(ResponseAdapter):
 
     def prepare_reply(self, convo, turn_id, text):
         if not self.wait_for_done:
+            convo.set_pending_ai_text(turn_id, "(sent to robot)")
             return "(sent to robot)", None
 
         try:
@@ -73,6 +74,7 @@ class RobotResponseAdapter(ResponseAdapter):
         else:
             reply_text = "(robot worker timeout / error — see terminal)"
 
+        convo.set_pending_ai_text(turn_id, reply_text)
         return reply_text, None
 
     def complete_turn(self, convo, turn_id, reply, outpath):

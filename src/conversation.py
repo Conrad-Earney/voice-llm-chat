@@ -51,6 +51,7 @@ class ConversationManager:
             f.write(self.session_dir)
 
         self.log_path = os.path.join(self.session_dir, "conversation_log.jsonl")
+        self.dialogue_path = os.path.join(self.session_dir, "session_dialogue.txt")
 
         # Jobs TO robot (_input.json)
         self.to_robot_dir = None
@@ -66,6 +67,46 @@ class ConversationManager:
         with open(self.log_path, "a") as f:
             json.dump(record, f)
             f.write("\n")
+
+    def _atomic_write_text(self, final_path, text):
+        tmp_path = final_path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp_path, final_path)
+
+    def _dialogue_line(self, turn_id, speaker, text):
+        safe_text = "" if text is None else str(text)
+        return "turn_{} {}: {}".format(int(turn_id), speaker, json.dumps(safe_text, ensure_ascii=False))
+
+    def _rewrite_session_dialogue(self):
+        lines = []
+        if os.path.isfile(self.log_path):
+            with open(self.log_path, "r", encoding="utf-8") as f:
+                for raw_line in f:
+                    raw_line = raw_line.strip()
+                    if not raw_line:
+                        continue
+                    try:
+                        record = json.loads(raw_line)
+                    except Exception:
+                        continue
+
+                    turn_id = record.get("turn")
+                    if turn_id is None:
+                        continue
+
+                    lines.append(self._dialogue_line(turn_id, "user", record.get("user", "")))
+                    lines.append(self._dialogue_line(turn_id, "robot", record.get("ai_text", "")))
+
+        # Use two blank lines between speaker turns for easier scanning.
+        dialogue_text = "\n\n\n".join(lines)
+        if dialogue_text:
+            dialogue_text += "\n\n\n"
+        self._atomic_write_text(self.dialogue_path, dialogue_text)
+
+    def set_pending_ai_text(self, turn_id, ai_text):
+        if self._pending_turn and self._pending_turn.get("turn") == turn_id:
+            self._pending_turn["ai_text"] = ai_text
 
     # ---------------------------------------------------------
     # Phase 1 — Transcription only
@@ -116,7 +157,7 @@ class ConversationManager:
         self._pending_turn = {
             "turn": turn_id,
             "user": text,
-            "assistant": None,
+            "ai_text": None,
             "participant_duration_sec": participant_duration_sec,
             "ai_duration_sec": None,
         }
@@ -206,7 +247,8 @@ class ConversationManager:
         self._pending_turn["ai_duration_sec"] = ai_duration_sec
 
         self._log(self._pending_turn)
-        debug(TAG_LOG, f"Logged turn {self._pending_turn["turn"]}")
+        self._rewrite_session_dialogue()
+        debug(TAG_LOG, "Logged turn {}".format(self._pending_turn["turn"]))
 
         self._pending_turn = None
 
