@@ -41,44 +41,13 @@ def gui():
     container.place(relx=0.5, rely=0.5, anchor="center")
 
     # --------------------------------------
-    # CHAT WINDOW (scrollable)
-    # --------------------------------------
-    chat_frame = tk.Frame(container)
-
-    scroll = tk.Scrollbar(chat_frame)
-    scroll.pack(side="right", fill="y")
-
-    chat = tk.Text(
-        chat_frame,
-        width=90,
-        height=24,
-        wrap="word",
-        yscrollcommand=scroll.set,
-        font=("Helvetica", 16),
-        padx=20,
-        pady=20
-    )
-    chat.pack(side="left", fill="both", expand=True)
-    scroll.config(command=chat.yview)
-
-    chat_frame.pack(pady=20)
-
-    # --------------------------------------
-    # Chat helpers — LABELS REMOVED
+    # Transcript display disabled for participants
     # --------------------------------------
     def show_user(text):
-        chat.insert(tk.END, f"{text}\n\n", ("user_msg",))
-        chat.see(tk.END)
+        pass
 
     def show_ai(text):
-        chat.insert(tk.END, f"{text}\n\n", ("ai_msg",))
-        chat.see(tk.END)
-
-    # --------------------------------------
-    # Styling tags
-    # --------------------------------------
-    chat.tag_configure("user_msg", justify="right", foreground="#0066cc")
-    chat.tag_configure("ai_msg", justify="left", foreground="#ff4da6")  # pink
+        pass
 
     # --------------------------------------
     # Status indicator

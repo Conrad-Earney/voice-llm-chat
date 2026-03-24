@@ -18,7 +18,7 @@ _DEFAULTS = {
     "ROBOT_INBOX_DIRNAME": "robot_inbox",
     "WAIT_FOR_NAO_DONE": True,
     "NAO_DONE_TIMEOUT_SEC": 30.0,
-    "USE_NAO_BACKEND": True,
+    "USE_NAO_BACKEND": False,
     "COMPUTER": "macmini",
     "AUDIO_INPUT_NAME": "Scarlett Solo",
     "TTS_VOICE": "Zoe (Premium)",
@@ -248,14 +248,14 @@ UQ_PY3_API_BASE = (
 CONVERSE_MODEL = (
     os.getenv("VOICE_LLM_CHAT_CONVERSE_MODEL")
     or _LOCAL_CFG.get("converse_model")
-    or _NAO_CFG.get("consumer_model")
+    or _VOICE_CFG.get("converse_model")
     or _RUNTIME_CFG.get("default_converse_model")
     or _DEFAULTS["CONVERSE_MODEL"]
 )
 CONVERSE_INTERLOCUTOR = (
     os.getenv("VOICE_LLM_CHAT_CONVERSE_INTERLOCUTOR")
     or _LOCAL_CFG.get("converse_interlocutor")
-    or _NAO_CFG.get("consumer_interlocutor")
+    or _VOICE_CFG.get("converse_interlocutor")
     or _CONVERSATION_CFG.get("default_interlocutor")
     or _DEFAULTS["CONVERSE_INTERLOCUTOR"]
 )
