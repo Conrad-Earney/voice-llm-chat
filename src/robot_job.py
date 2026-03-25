@@ -32,7 +32,8 @@ def _atomic_write_json(final_path, payload):
 
 
 def write_input_job(inbox_dir, turn_id, robot_name, participant_text,
-                    input_audio_path=None, participant_duration_sec=None):
+                    input_audio_path=None, participant_duration_sec=None,
+                    recording_started_at=None):
     """
     Write a participant-input job JSON for the NAO repo to consume.
     """
@@ -44,6 +45,7 @@ def write_input_job(inbox_dir, turn_id, robot_name, participant_text,
         "turn_id": int(turn_id),
         "user": participant_text,
         "participant_duration_sec": participant_duration_sec,
+        "recording_started_at": recording_started_at,
         "input_audio_path": input_audio_path,
     }
 

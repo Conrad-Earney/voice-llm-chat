@@ -1,6 +1,7 @@
 import threading
 import tkinter as tk
 from tkinter import ttk
+from datetime import datetime
 
 from src.conversation import ConversationManager
 from src.audio_io import Recorder
@@ -101,6 +102,7 @@ def gui():
     # --------------------------------------
     turn_in_flight = False
     is_listening = False
+    recording_started_at = None
 
     def set_turn_in_flight(flag):
         nonlocal turn_in_flight
@@ -114,18 +116,19 @@ def gui():
     # Recording logic
     # --------------------------------------
     def on_press(event):
-        nonlocal is_listening
+        nonlocal is_listening, recording_started_at
 
         if turn_in_flight:
             debug(TAG_UI, "Ignoring press: turn already in flight")
             return
 
         is_listening = True
+        recording_started_at = datetime.now().isoformat(timespec="milliseconds")
         set_status("Listening…", "red")
         rec.start()
 
     def on_release(event):
-        nonlocal is_listening
+        nonlocal is_listening, recording_started_at
 
         # Ignore releases that happen when we never started listening
         if not is_listening:
@@ -142,10 +145,12 @@ def gui():
         set_status("Processing…", "blue")
 
         audio = rec.stop()
+        started_at = recording_started_at
+        recording_started_at = None
 
         def worker():
             try:
-                turn_id, text = convo.transcribe_only(audio)
+                turn_id, text = convo.transcribe_only(audio, recording_started_at=started_at)
                 display_text = text if text else "(no speech detected)"
                 root.after(0, lambda: show_user(display_text))
                 reply, outpath = response_adapter.prepare_reply(convo, turn_id, text)

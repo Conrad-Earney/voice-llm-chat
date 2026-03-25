@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 import threading
 import logging
 import os
+from datetime import datetime
 
 from config import validate_mode_settings
 from src.audio_io import Recorder
@@ -18,28 +19,32 @@ convo = ConversationManager(robot_enabled=True)    # creates session dir etc.
 
 _lock = threading.Lock()
 _is_listening = False
+_recording_started_at = None
 
 @app.post("/start")
 def start():
-    global _is_listening
+    global _is_listening, _recording_started_at
     with _lock:
         if _is_listening:
             return jsonify({"ok": True, "already": True})
         _is_listening = True
+        _recording_started_at = datetime.now().isoformat(timespec="milliseconds")
         rec.start()
     debug(TAG, "Recording started via /start")
     return jsonify({"ok": True})
 
 @app.post("/stop")
 def stop():
-    global _is_listening
+    global _is_listening, _recording_started_at
     with _lock:
         if not _is_listening:
             return jsonify({"ok": False, "error": "not_listening"}), 400
         _is_listening = False
+        recording_started_at = _recording_started_at
+        _recording_started_at = None
 
     audio = rec.stop()
-    turn_id, text = convo.transcribe_only(audio)  # writes the input job to outbox already
+    turn_id, text = convo.transcribe_only(audio, recording_started_at=recording_started_at)  # writes the input job to outbox already
 
     return jsonify({
     "ok": True,

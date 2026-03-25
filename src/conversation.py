@@ -111,7 +111,7 @@ class ConversationManager:
     # ---------------------------------------------------------
     # Phase 1 — Transcription only
     # ---------------------------------------------------------
-    def transcribe_only(self, audio):
+    def transcribe_only(self, audio, recording_started_at=None):
         """
         Saves input wav + returns (turn_id, transcription text).
         Also computes participant's speech duration and stores a pending log row.
@@ -171,6 +171,7 @@ class ConversationManager:
                     participant_text=text,
                     input_audio_path=input_audio_path,
                     participant_duration_sec=participant_duration_sec,
+                    recording_started_at=recording_started_at,
                 )
             except Exception as e:
                 error(TAG_ASR, "write_input_job failed: {}".format(repr(e)))
