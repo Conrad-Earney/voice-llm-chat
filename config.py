@@ -24,7 +24,7 @@ _DEFAULTS = {
     "TTS_VOICE": "Zoe (Premium)",
     "UQ_PY3_API_BASE": "http://localhost:5001",
     "CONVERSE_MODEL": "custom_1",
-    "CONVERSE_INTERLOCUTOR": "User",
+    "CONVERSE_INTERLOCUTOR": None,
 }
 
 
@@ -234,6 +234,21 @@ AUDIO_INPUT_NAME = _pick(
     default_key="AUDIO_INPUT_NAME",
 )
 TTS_VOICE = _pick("tts_voice", env_key="VOICE_LLM_CHAT_TTS_VOICE", default_key="TTS_VOICE")
+REQUIRE_ENTER_BEFORE_SPEAK = bool(
+    _parse_bool(
+        os.getenv("VOICE_LLM_CHAT_REQUIRE_ENTER_BEFORE_SPEAK"),
+        _parse_bool(_NAO_CFG.get("require_enter_before_speak"), False),
+    )
+)
+CONVERSE_INTERLOCUTOR = (
+    os.getenv("VOICE_LLM_CHAT_CONVERSE_INTERLOCUTOR")
+    or _LOCAL_CFG.get("converse_interlocutor")
+    or _VOICE_CFG.get("converse_interlocutor")
+    or _CONVERSATION_CFG.get("default_interlocutor")
+    or _DEFAULTS["CONVERSE_INTERLOCUTOR"]
+)
+if CONVERSE_INTERLOCUTOR is not None:
+    CONVERSE_INTERLOCUTOR = str(CONVERSE_INTERLOCUTOR).strip() or None
 UQ_PY3_API_BASE = (
     os.getenv("UQ_PY3_API")
     or os.getenv("VOICE_LLM_CHAT_UQ_PY3_API")
@@ -251,13 +266,6 @@ CONVERSE_MODEL = (
     or _VOICE_CFG.get("converse_model")
     or _RUNTIME_CFG.get("default_converse_model")
     or _DEFAULTS["CONVERSE_MODEL"]
-)
-CONVERSE_INTERLOCUTOR = (
-    os.getenv("VOICE_LLM_CHAT_CONVERSE_INTERLOCUTOR")
-    or _LOCAL_CFG.get("converse_interlocutor")
-    or _VOICE_CFG.get("converse_interlocutor")
-    or _CONVERSATION_CFG.get("default_interlocutor")
-    or _DEFAULTS["CONVERSE_INTERLOCUTOR"]
 )
 
 

@@ -1,10 +1,29 @@
 import subprocess
 import os
 
-from config import TTS_VOICE
+from config import TTS_VOICE, REQUIRE_ENTER_BEFORE_SPEAK
 from src.logger import debug, error
 
 TAG = "TTS"
+
+
+def _wait_for_operator_enter():
+    if not REQUIRE_ENTER_BEFORE_SPEAK:
+        return
+
+    prompt = (
+        "\n[operator_gate] Reply is ready (voice_only). "
+        "Press Enter in this terminal to play computer speech... "
+    )
+
+    try:
+        raw_input(prompt)
+    except NameError:
+        input(prompt)
+    except EOFError:
+        print("[operator_gate] stdin unavailable; continuing without Enter confirmation.")
+    except Exception as e:
+        print("[operator_gate] Enter gate failed ({}); continuing.".format(e))
 
 
 def speak(text, output_path):

@@ -6,6 +6,7 @@ from datetime import datetime
 from src.conversation import ConversationManager
 from src.audio_io import Recorder
 from src.response_modes import LocalResponseAdapter, RobotResponseAdapter
+from src.tts_engine import _wait_for_operator_enter
 from config import ensure_directories_exist, USE_NAO_BACKEND, WAIT_FOR_NAO_DONE, validate_mode_settings
 
 from src.logger import debug, exc
@@ -135,6 +136,8 @@ def gui():
     def handle_ai_reply(turn_id, reply, outpath):
         show_ai(reply)
         if outpath:
+            set_status("Awaiting operator…", "purple")
+            _wait_for_operator_enter()
             set_status("Speaking…", "purple")
         else:
             set_status("Completing…", "blue")

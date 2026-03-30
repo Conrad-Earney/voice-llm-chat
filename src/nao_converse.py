@@ -26,13 +26,20 @@ def segments_to_text(segments_list):
 
 
 def converse(prompt, history=None, turn_count=0, model=None, interlocutor=None, ephemeral_system=None):
+    safe_interlocutor = interlocutor
+    if safe_interlocutor is None:
+        safe_interlocutor = CONVERSE_INTERLOCUTOR
+    if safe_interlocutor is not None:
+        safe_interlocutor = str(safe_interlocutor).strip() or None
+
     payload = {
         "model": model or CONVERSE_MODEL,
-        "interlocutor": interlocutor or CONVERSE_INTERLOCUTOR,
         "turn_count": int(turn_count or 0),
         "history": history or [],
         "prompt": prompt,
     }
+    if safe_interlocutor:
+        payload["interlocutor"] = safe_interlocutor
     if ephemeral_system:
         payload["ephemeral_system"] = str(ephemeral_system)
 
