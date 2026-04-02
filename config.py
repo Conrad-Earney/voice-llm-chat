@@ -6,7 +6,7 @@ import os
 REQUIRED_DIRS = ["sessions"]
 
 _DEFAULTS = {
-    "OLLAMA_MODEL": "custom_1",
+    "OLLAMA_MODEL": "gesturizer4",
     "OLLAMA_URL": "http://localhost:11434",
     "WHISPER_MODEL": "base.en",
     "SAMPLE_RATE": 16000,
@@ -23,7 +23,7 @@ _DEFAULTS = {
     "AUDIO_INPUT_NAME": "Scarlett Solo",
     "TTS_VOICE": "Zoe (Premium)",
     "UQ_PY3_API_BASE": "http://localhost:5001",
-    "CONVERSE_MODEL": "custom_1",
+    "CONVERSE_MODEL": "gesturizer4",
     "CONVERSE_INTERLOCUTOR": None,
 }
 

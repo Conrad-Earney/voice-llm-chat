@@ -1,7 +1,6 @@
 import requests
 
 from config import (
-    CONVERSE_INTERLOCUTOR,
     CONVERSE_MODEL,
     CONNECT_TIMEOUT_SEC,
     READ_TIMEOUT_SEC,
@@ -11,6 +10,7 @@ from src.logger import debug, error
 
 
 TAG = "UQPY3"
+_UNSET = object()
 
 
 def segments_to_text(segments_list):
@@ -25,10 +25,10 @@ def segments_to_text(segments_list):
     return " ".join(parts).strip()
 
 
-def converse(prompt, history=None, turn_count=0, model=None, interlocutor=None, ephemeral_system=None):
-    safe_interlocutor = interlocutor
-    if safe_interlocutor is None:
-        safe_interlocutor = CONVERSE_INTERLOCUTOR
+def converse(prompt, history=None, turn_count=0, model=None, interlocutor=_UNSET, ephemeral_system=None):
+    safe_interlocutor = None
+    if interlocutor is not _UNSET:
+        safe_interlocutor = interlocutor
     if safe_interlocutor is not None:
         safe_interlocutor = str(safe_interlocutor).strip() or None
 
@@ -45,12 +45,15 @@ def converse(prompt, history=None, turn_count=0, model=None, interlocutor=None, 
 
     url = UQ_PY3_API_BASE.rstrip("/") + "/converse"
     debug(TAG, "POST {}".format(url))
+    connect_timeout: float = float(CONNECT_TIMEOUT_SEC)
+    read_timeout: float = float(READ_TIMEOUT_SEC)
+    timeout: tuple[float, float] = (connect_timeout, read_timeout)
 
     try:
         response = requests.post(
             url,
             json=payload,
-            timeout=(CONNECT_TIMEOUT_SEC, READ_TIMEOUT_SEC),
+            timeout=timeout,
         )
         response.raise_for_status()
         data = response.json()
