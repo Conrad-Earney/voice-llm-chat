@@ -108,6 +108,19 @@ class ConversationManager:
         if self._pending_turn and self._pending_turn.get("turn") == turn_id:
             self._pending_turn["ai_text"] = ai_text
 
+    def generate_watchdog_reply(self, ephemeral_system=None):
+        reply_data = nao_converse.converse(
+            prompt="",
+            history=self.history,
+            turn_count=self.turn,
+            ephemeral_system=ephemeral_system,
+            watchdog_mode=True,
+        )
+        reply = (reply_data.get("spoken_text") or "").strip()
+        if reply:
+            self.history.append({"role": "assistant", "content": reply})
+        return reply
+
     # ---------------------------------------------------------
     # Phase 1 — Transcription only
     # ---------------------------------------------------------

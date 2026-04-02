@@ -25,6 +25,15 @@ _DEFAULTS = {
     "UQ_PY3_API_BASE": "http://localhost:5001",
     "CONVERSE_MODEL": "custom_1",
     "CONVERSE_INTERLOCUTOR": None,
+    "WATCHDOG_ENABLED": False,
+    "WATCHDOG_MODE": True,
+    "WATCHDOG_ACTIVATE_AFTER_TURN": 0,
+    "WATCHDOG_INTERVAL_SEC": 30.0,
+    "WATCHDOG_MAX_CONSECUTIVE_WITHOUT_USER": 2,
+    "WATCHDOG_EPHEMERAL_SYSTEM_PROMPT": (
+        "The participant has not spoken recently. Re-engage with one short, warm, "
+        "context-aware line. Do not mention silence, timing, or that this is a watchdog prompt."
+    ),
 }
 
 
@@ -118,6 +127,7 @@ _VOICE_CFG = {}
 _NAO_CFG = {}
 _RUNTIME_CFG = {}
 _CONVERSATION_CFG = {}
+_WATCHDOG_CFG = {}
 
 if _parse_bool(os.getenv("VOICE_LLM_CHAT_DISABLE_UQ_PROFILE"), default=False):
     ACTIVE_PROJECT_ID = "disabled"
@@ -128,6 +138,7 @@ else:
         _NAO_CFG = _PROJECT_PROFILE.get("nao_worker") or {}
         _RUNTIME_CFG = _PROJECT_PROFILE.get("runtime") or {}
         _CONVERSATION_CFG = _PROJECT_PROFILE.get("conversation") or {}
+        _WATCHDOG_CFG = _CONVERSATION_CFG.get("watchdog") or {}
     except Exception as e:
         ACTIVE_PROJECT_ID = "defaults"
         _PROJECT_PROFILE = {}
@@ -135,6 +146,7 @@ else:
         _NAO_CFG = {}
         _RUNTIME_CFG = {}
         _CONVERSATION_CFG = {}
+        _WATCHDOG_CFG = {}
         print("WARN: Falling back to built-in defaults ({}).".format(e))
 
 LOCAL_CONFIG_PATH, _LOCAL_CFG = _load_local_override()
@@ -266,6 +278,39 @@ CONVERSE_MODEL = (
     or _VOICE_CFG.get("converse_model")
     or _RUNTIME_CFG.get("default_converse_model")
     or _DEFAULTS["CONVERSE_MODEL"]
+)
+
+WATCHDOG_ENABLED = _parse_bool(
+    os.getenv("VOICE_LLM_CHAT_WATCHDOG_ENABLED"),
+    _parse_bool(_LOCAL_CFG.get("watchdog_enabled"), _parse_bool(_WATCHDOG_CFG.get("enabled"), _DEFAULTS["WATCHDOG_ENABLED"])),
+)
+WATCHDOG_MODE = _parse_bool(
+    os.getenv("VOICE_LLM_CHAT_WATCHDOG_MODE"),
+    _parse_bool(_LOCAL_CFG.get("watchdog_mode"), _parse_bool(_WATCHDOG_CFG.get("watchdog_mode"), _DEFAULTS["WATCHDOG_MODE"])),
+)
+WATCHDOG_ACTIVATE_AFTER_TURN = int(
+    os.getenv("VOICE_LLM_CHAT_WATCHDOG_ACTIVATE_AFTER_TURN")
+    or _LOCAL_CFG.get("watchdog_activate_after_turn")
+    or _WATCHDOG_CFG.get("activate_after_turn")
+    or _DEFAULTS["WATCHDOG_ACTIVATE_AFTER_TURN"]
+)
+WATCHDOG_INTERVAL_SEC = float(
+    os.getenv("VOICE_LLM_CHAT_WATCHDOG_INTERVAL_SEC")
+    or _LOCAL_CFG.get("watchdog_interval_sec")
+    or _WATCHDOG_CFG.get("interval_sec")
+    or _DEFAULTS["WATCHDOG_INTERVAL_SEC"]
+)
+WATCHDOG_MAX_CONSECUTIVE_WITHOUT_USER = int(
+    os.getenv("VOICE_LLM_CHAT_WATCHDOG_MAX_CONSECUTIVE_WITHOUT_USER")
+    or _LOCAL_CFG.get("watchdog_max_consecutive_without_user")
+    or _WATCHDOG_CFG.get("max_consecutive_without_user")
+    or _DEFAULTS["WATCHDOG_MAX_CONSECUTIVE_WITHOUT_USER"]
+)
+WATCHDOG_EPHEMERAL_SYSTEM_PROMPT = (
+    os.getenv("VOICE_LLM_CHAT_WATCHDOG_EPHEMERAL_SYSTEM_PROMPT")
+    or _LOCAL_CFG.get("watchdog_ephemeral_system_prompt")
+    or _WATCHDOG_CFG.get("ephemeral_system_prompt")
+    or _DEFAULTS["WATCHDOG_EPHEMERAL_SYSTEM_PROMPT"]
 )
 
 
