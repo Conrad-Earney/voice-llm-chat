@@ -2,6 +2,7 @@ import requests
 
 from config import (
     CONVERSE_MODEL,
+    CONVERSE_INTERLOCUTOR,
     CONNECT_TIMEOUT_SEC,
     READ_TIMEOUT_SEC,
     UQ_PY3_API_BASE,
@@ -25,10 +26,20 @@ def segments_to_text(segments_list):
     return " ".join(parts).strip()
 
 
-def converse(prompt, history=None, turn_count=0, model=None, interlocutor=_UNSET, ephemeral_system=None):
+def converse(
+    prompt,
+    history=None,
+    turn_count=0,
+    model=None,
+    interlocutor=_UNSET,
+    ephemeral_system=None,
+    watchdog_mode=False,
+):
     safe_interlocutor = None
     if interlocutor is not _UNSET:
         safe_interlocutor = interlocutor
+    else:
+        safe_interlocutor = CONVERSE_INTERLOCUTOR
     if safe_interlocutor is not None:
         safe_interlocutor = str(safe_interlocutor).strip() or None
 
@@ -42,6 +53,8 @@ def converse(prompt, history=None, turn_count=0, model=None, interlocutor=_UNSET
         payload["interlocutor"] = safe_interlocutor
     if ephemeral_system:
         payload["ephemeral_system"] = str(ephemeral_system)
+    if watchdog_mode:
+        payload["watchdog_mode"] = True
 
     url = UQ_PY3_API_BASE.rstrip("/") + "/converse"
     debug(TAG, "POST {}".format(url))
