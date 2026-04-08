@@ -1,17 +1,18 @@
 import threading
 import tkinter as tk
 import os
-import re
 from tkinter import ttk
 from datetime import datetime
 
 from src.conversation import ConversationManager
 from src.audio_io import Recorder
 from src.audio_io import get_audio_duration
+from src.display import place_on_target_display
 from src.response_modes import LocalResponseAdapter, RobotResponseAdapter
-from src.tts_engine import _wait_for_operator_enter, speak
+from src.tts_engine import speak
 from config import (
     ensure_directories_exist,
+    REQUIRE_ENTER_BEFORE_SPEAK,
     USE_NAO_BACKEND,
     WAIT_FOR_NAO_DONE,
     WATCHDOG_ENABLED,
@@ -29,83 +30,15 @@ ensure_directories_exist()
 TAG_UI = "UI"
 TAG_WORKER = "WORKER"
 WINDOWED_FALLBACK_GEOMETRY = "1280x800+80+80"
+FULLSCREEN_AFTER_PLACEMENT_DELAY_MS = 500
 
 
-def _signed_offset(value):
-    return "+{}".format(value) if value >= 0 else str(value)
+def _env_bool(name, default):
+    raw_value = os.getenv(name)
+    if raw_value in (None, ""):
+        return default
 
-
-def _format_geometry(width, height, x, y):
-    return "{}x{}{}{}".format(width, height, _signed_offset(x), _signed_offset(y))
-
-
-def _parse_geometry_override(raw_value):
-    raw_value = (raw_value or "").strip()
-    if not raw_value:
-        return None
-
-    match = re.fullmatch(r"(\d+)x(\d+)([+-]\d+)([+-]\d+)", raw_value)
-    if not match:
-        return None
-
-    width_text, height_text, x_text, y_text = match.groups()
-    return (
-        max(200, int(width_text)),
-        max(200, int(height_text)),
-        int(x_text),
-        int(y_text),
-    )
-
-
-def _best_external_geometry(root):
-    root.update_idletasks()
-
-    screen_w = int(root.winfo_screenwidth())
-    screen_h = int(root.winfo_screenheight())
-    vroot_x = int(root.winfo_vrootx())
-    vroot_y = int(root.winfo_vrooty())
-    vroot_w = int(root.winfo_vrootwidth())
-    vroot_h = int(root.winfo_vrootheight())
-
-    virtual_left = vroot_x
-    virtual_top = vroot_y
-    virtual_right = vroot_x + vroot_w
-    virtual_bottom = vroot_y + vroot_h
-
-    candidates = []
-
-    if virtual_left < 0:
-        candidates.append((0 - virtual_left, screen_h, virtual_left, 0))
-    if virtual_right > screen_w:
-        candidates.append((virtual_right - screen_w, screen_h, screen_w, 0))
-    if virtual_top < 0:
-        candidates.append((screen_w, 0 - virtual_top, 0, virtual_top))
-    if virtual_bottom > screen_h:
-        candidates.append((screen_w, virtual_bottom - screen_h, 0, screen_h))
-
-    candidates = [candidate for candidate in candidates if candidate[0] >= 400 and candidate[1] >= 300]
-    if not candidates:
-        return None
-
-    return max(candidates, key=lambda candidate: candidate[0] * candidate[1])
-
-
-def _enter_presentation_display(root, bounds_override_env):
-    override = _parse_geometry_override(os.getenv(bounds_override_env))
-    if override is not None:
-        width, height, x, y = override
-    else:
-        target = _best_external_geometry(root)
-        if target is None:
-            root.geometry(WINDOWED_FALLBACK_GEOMETRY)
-            return False
-        width, height, x, y = target
-
-    root.attributes("-fullscreen", False)
-    root.overrideredirect(True)
-    root.geometry(_format_geometry(width, height, x, y))
-    root.lift()
-    return True
+    return raw_value.strip().lower() in ("1", "true", "yes", "on")
 
 
 def gui():
@@ -121,14 +54,18 @@ def gui():
     root = tk.Tk()
     root.title("Voice Chat")
 
-    presentation_mode = _enter_presentation_display(root, "VOICE_LLM_CHAT_DISPLAY_BOUNDS")
+    display_positioned = place_on_target_display(root, WINDOWED_FALLBACK_GEOMETRY)
+    start_fullscreen = _env_bool("VOICE_LLM_CHAT_START_FULLSCREEN", True)
+
+    def enter_fullscreen():
+        if display_positioned and start_fullscreen:
+            root.attributes("-fullscreen", True)
+
+    if start_fullscreen:
+        root.after(FULLSCREEN_AFTER_PLACEMENT_DELAY_MS, enter_fullscreen)
 
     def on_escape(event=None):
-        if presentation_mode:
-            root.overrideredirect(False)
-            root.geometry(WINDOWED_FALLBACK_GEOMETRY)
-        else:
-            root.attributes("-fullscreen", False)
+        root.attributes("-fullscreen", False)
 
     root.bind("<Escape>", on_escape)
 
@@ -173,10 +110,38 @@ def gui():
     local_watchdog_in_flight = False
     local_watchdog_total = 0
     local_watchdog_consecutive_without_user = 0
+    operator_gate_active = False
+    operator_gate_callback = None
     ui_closing = False
 
     def local_watchdog_active():
         return bool((not USE_NAO_BACKEND) and WATCHDOG_ENABLED)
+
+    def release_operator_gate(event=None):
+        nonlocal operator_gate_active, operator_gate_callback
+        if not operator_gate_active:
+            return
+
+        callback = operator_gate_callback
+        operator_gate_active = False
+        operator_gate_callback = None
+        debug(TAG_UI, "Operator released queued speech")
+        if callback is not None:
+            callback()
+
+    def wait_for_operator_release(callback):
+        nonlocal operator_gate_active, operator_gate_callback
+        if not REQUIRE_ENTER_BEFORE_SPEAK:
+            callback()
+            return
+
+        operator_gate_active = True
+        operator_gate_callback = callback
+        set_status("Processing…", "blue")
+        print(
+            "[operator_gate] Reply is ready. Press Return while the participant "
+            "GUI is focused to play speech."
+        )
 
     def set_turn_in_flight(flag):
         nonlocal turn_in_flight
@@ -262,16 +227,18 @@ def gui():
             finish_local_watchdog(True)
             return
 
-        _wait_for_operator_enter()
-        if ui_closing:
-            finish_local_watchdog(False)
-            return
-        set_status("Speaking…", "purple")
-        threading.Thread(
-            target=run_local_watchdog_audio,
-            args=(reply, output_path),
-            daemon=True,
-        ).start()
+        def start_local_watchdog_audio():
+            if ui_closing:
+                finish_local_watchdog(False)
+                return
+            set_status("Speaking…", "purple")
+            threading.Thread(
+                target=run_local_watchdog_audio,
+                args=(reply, output_path),
+                daemon=True,
+            ).start()
+
+        wait_for_operator_release(start_local_watchdog_audio)
 
     def fire_local_watchdog():
         nonlocal local_watchdog_after_id, local_watchdog_in_flight
@@ -370,11 +337,6 @@ def gui():
 
     def handle_ai_reply(turn_id, reply, outpath):
         show_ai(reply)
-        if outpath:
-            _wait_for_operator_enter()
-            set_status("Speaking…", "purple")
-        else:
-            set_status("Completing…", "blue")
 
         def completion_worker():
             try:
@@ -386,16 +348,32 @@ def gui():
             if outpath and local_watchdog_active():
                 root.after(0, schedule_local_watchdog)
 
-        threading.Thread(target=completion_worker, daemon=True).start()
+        def start_completion():
+            if ui_closing:
+                set_turn_in_flight(False)
+                return
+            if outpath:
+                set_status("Speaking…", "purple")
+            else:
+                set_status("Completing…", "blue")
+            threading.Thread(target=completion_worker, daemon=True).start()
+
+        if outpath:
+            wait_for_operator_release(start_completion)
+        else:
+            start_completion()
 
     # Bind button events
     button.bind("<ButtonPress-1>", on_press)
     button.bind("<ButtonRelease-1>", on_release)
+    root.bind_all("<Return>", release_operator_gate)
 
     # Cleanup
     def on_closing():
-        nonlocal ui_closing
+        nonlocal operator_gate_active, operator_gate_callback, ui_closing
         ui_closing = True
+        operator_gate_active = False
+        operator_gate_callback = None
         cancel_local_watchdog()
         rec.shutdown()
         root.destroy()
