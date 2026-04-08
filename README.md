@@ -57,7 +57,7 @@ Useful environment variables:
 - `VOICE_LLM_CHAT_TTS_VOICE=<macOS say voice>`
 - `VOICE_LLM_CHAT_DISPLAY_TARGET=<display-id>` optionally pins the participant GUI to a specific display; by default it uses the first non-main display
 - `VOICE_LLM_CHAT_START_FULLSCREEN=0|1` controls whether the GUI enters fullscreen after being placed on the target display; default is `1`
-- `VOICE_LLM_CHAT_REQUIRE_ENTER_BEFORE_SPEAK=1` gates local speech until the operator presses `Return`, keypad `Enter`, or `Space` while the participant GUI is focused
+- `VOICE_LLM_CHAT_REQUIRE_ENTER_BEFORE_SPEAK=1` gates local speech until the operator presses `Return` while the participant GUI is focused
 - `VOICE_LLM_CHAT_DISABLE_UQ_PROFILE=1`
 
 This checkout currently uses `local_config.json` as a persistent local override:
