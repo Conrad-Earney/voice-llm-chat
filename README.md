@@ -56,6 +56,7 @@ Useful environment variables:
 - `VOICE_LLM_CHAT_AUDIO_INPUT_NAME=<device-name>`
 - `VOICE_LLM_CHAT_TTS_VOICE=<macOS say voice>`
 - `VOICE_LLM_CHAT_DISPLAY_TARGET=<display-id>` optionally pins the participant GUI to a specific display; by default it uses the first non-main display
+- `VOICE_LLM_CHAT_PLACE_ON_TARGET_DISPLAY=0|1` controls whether the GUI is positioned to fill a chosen display before showing; default is `1`
 - `VOICE_LLM_CHAT_START_FULLSCREEN=0|1` controls whether the GUI enters fullscreen after being placed on the target display; default is `1`
 - `VOICE_LLM_CHAT_REQUIRE_ENTER_BEFORE_SPEAK=1` gates local speech until the operator presses `Return` while the participant GUI is focused
 - `VOICE_LLM_CHAT_DISABLE_UQ_PROFILE=1`
@@ -66,7 +67,7 @@ This checkout currently uses `local_config.json` as a persistent local override:
 {
   "use_nao_backend": false,
   "audio_input_name": "Scarlett Solo",
-  "tts_voice": "Zoe (Premium)"
+  "tts_voice": "Joelle (Enhanced)"
 }
 ```
 

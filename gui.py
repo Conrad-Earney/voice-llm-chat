@@ -1,7 +1,6 @@
 import threading
 import tkinter as tk
 import os
-from tkinter import ttk
 from datetime import datetime
 
 from src.conversation import ConversationManager
@@ -32,6 +31,17 @@ TAG_WORKER = "WORKER"
 WINDOWED_FALLBACK_GEOMETRY = "1280x800+80+80"
 FULLSCREEN_AFTER_PLACEMENT_DELAY_MS = 500
 
+APP_BACKGROUND = "#F4F7FB"
+BUTTON_BACKGROUND = "#A65300"
+BUTTON_FOREGROUND = "#FFFFFF"
+BUTTON_ACTIVE_BACKGROUND = "#7A3D00"
+BUTTON_BORDER = "#7A3D00"
+BUTTON_BUSY_BACKGROUND = "#AAB7C4"
+BUTTON_BUSY_FOREGROUND = "#EEF3FF"
+BUTTON_BUSY_BORDER = "#7D8A98"
+STATUS_FONT = ("Helvetica", 32, "bold")
+BUTTON_FONT = ("Helvetica", 28, "bold")
+
 
 def _env_bool(name, default):
     raw_value = os.getenv(name)
@@ -53,8 +63,14 @@ def gui():
 
     root = tk.Tk()
     root.title("Voice Chat")
+    root.configure(bg=APP_BACKGROUND)
 
-    display_positioned = place_on_target_display(root, WINDOWED_FALLBACK_GEOMETRY)
+    place_on_display = _env_bool("VOICE_LLM_CHAT_PLACE_ON_TARGET_DISPLAY", True)
+    if place_on_display:
+        display_positioned = place_on_target_display(root, WINDOWED_FALLBACK_GEOMETRY)
+    else:
+        root.geometry(WINDOWED_FALLBACK_GEOMETRY)
+        display_positioned = False
     start_fullscreen = _env_bool("VOICE_LLM_CHAT_START_FULLSCREEN", True)
 
     def enter_fullscreen():
@@ -72,7 +88,7 @@ def gui():
     # --------------------------------------
     # Center container (for consistent layout)
     # --------------------------------------
-    container = tk.Frame(root)
+    container = tk.Frame(root, bg=APP_BACKGROUND)
     container.place(relx=0.5, rely=0.5, anchor="center")
 
     # --------------------------------------
@@ -87,18 +103,46 @@ def gui():
     # --------------------------------------
     # Status indicator
     # --------------------------------------
-    status = ttk.Label(container, text="Ready", foreground="green", font=("Helvetica", 16))
-    status.pack(pady=10)
+    status = tk.Label(
+        container,
+        text="Ready",
+        fg="green",
+        bg=APP_BACKGROUND,
+        font=STATUS_FONT,
+    )
+    status.pack(pady=20)
 
     def set_status(text, color):
-        status.config(text=text, foreground=color)
+        status.config(text=text, fg=color)
         status.update_idletasks()
+
+    def set_button_style(background, foreground, border):
+        button_outer.config(bg=border)
+        button.config(bg=background, fg=foreground)
 
     # --------------------------------------
     # Button (define early so we can disable/enable it)
     # --------------------------------------
-    button = ttk.Button(container, text="Hold to Talk")
-    button.pack(pady=20)
+    button_outer = tk.Frame(
+        container,
+        bg=BUTTON_BORDER,
+        bd=0,
+        highlightthickness=0,
+    )
+    button_outer.pack(pady=32)
+
+    button = tk.Label(
+        button_outer,
+        text="Hold to Talk",
+        font=BUTTON_FONT,
+        bg=BUTTON_BACKGROUND,
+        fg=BUTTON_FOREGROUND,
+        relief="flat",
+        bd=0,
+        padx=56,
+        pady=32,
+    )
+    button.pack(padx=4, pady=4)
 
     # --------------------------------------
     # Single-turn gating (prevents overlapping turns)
@@ -147,7 +191,10 @@ def gui():
         nonlocal turn_in_flight
         turn_in_flight = flag
         try:
-            button.state(["disabled"] if flag else ["!disabled"])
+            if flag:
+                set_button_style(BUTTON_BUSY_BACKGROUND, BUTTON_BUSY_FOREGROUND, BUTTON_BUSY_BORDER)
+            else:
+                set_button_style(BUTTON_BACKGROUND, BUTTON_FOREGROUND, BUTTON_BORDER)
         except Exception:
             pass
 
@@ -292,6 +339,7 @@ def gui():
         cancel_local_watchdog()
         is_listening = True
         recording_started_at = datetime.now().isoformat(timespec="milliseconds")
+        set_button_style(BUTTON_ACTIVE_BACKGROUND, BUTTON_FOREGROUND, BUTTON_ACTIVE_BACKGROUND)
         set_status("Listening…", "red")
         rec.start()
 
@@ -366,6 +414,8 @@ def gui():
     # Bind button events
     button.bind("<ButtonPress-1>", on_press)
     button.bind("<ButtonRelease-1>", on_release)
+    button_outer.bind("<ButtonPress-1>", on_press)
+    button_outer.bind("<ButtonRelease-1>", on_release)
     root.bind_all("<Return>", release_operator_gate)
 
     # Cleanup

@@ -21,7 +21,7 @@ _DEFAULTS = {
     "USE_NAO_BACKEND": False,
     "COMPUTER": "macmini",
     "AUDIO_INPUT_NAME": "Scarlett Solo",
-    "TTS_VOICE": "Zoe (Premium)",
+    "TTS_VOICE": "Joelle (Enhanced)",
     "UQ_PY3_API_BASE": "http://localhost:5001",
     "CONVERSE_MODEL": "gesturizer4",
     "CONVERSE_INTERLOCUTOR": None,
