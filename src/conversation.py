@@ -10,10 +10,10 @@ from config import (
     MIN_UTTERANCE_SEC,
     SILENCE_RMS_THRESHOLD,
     ROBOT_OUTBOX_DIRNAME,
-    NAO_DONE_TIMEOUT_SEC,
+    ROBOT_DONE_TIMEOUT_SEC,
     ROBOT_INBOX_DIRNAME,
     DEFAULT_ROBOT_NAME,
-    ROBOT_ENABLED,
+    ROBOT_CHAT_ENABLED,
     validate_mode_settings,
 )
 from src import audio_io, asr_whisper, nao_converse
@@ -31,7 +31,7 @@ class ConversationManager:
         self.history = []
         self.turn = 0
         self._pending_turn = None
-        self.robot_enabled = ROBOT_ENABLED if robot_enabled is None else bool(robot_enabled)
+        self.robot_enabled = ROBOT_CHAT_ENABLED if robot_enabled is None else bool(robot_enabled)
         self.robot_name = robot_name or DEFAULT_ROBOT_NAME
 
         if self.robot_enabled:
@@ -267,14 +267,14 @@ class ConversationManager:
         self._pending_turn = None
 
     # ---------------------------------------------------------
-    # NAO-ONLY METHOD
+    # ROBOT-CHAT PIPELINE METHOD
     # ---------------------------------------------------------
-    def wait_for_nao_done(self, turn_id, timeout_sec=None, poll_sec=0.05):
+    def wait_for_robot_done(self, turn_id, timeout_sec=None, poll_sec=0.05):
         if not self.robot_enabled or not self.from_robot_dir:
-            raise RuntimeError("wait_for_nao_done called while robot mode is disabled.")
+            raise RuntimeError("wait_for_robot_done called while robot mode is disabled.")
 
         if timeout_sec is None:
-            timeout_sec = NAO_DONE_TIMEOUT_SEC
+            timeout_sec = ROBOT_DONE_TIMEOUT_SEC
 
         done_path = os.path.join(self.from_robot_dir, "turn_{:04d}_output.json".format(int(turn_id)))
 

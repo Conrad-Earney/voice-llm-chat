@@ -1,17 +1,17 @@
 # voice-llm-chat
 
-Desktop voice chat with two experimental conditions.
+Desktop voice chat with two experimental pipelines.
 
-The repo-level default is `robot`, because the shared codebase is primarily used for NAO-backed experiments. This checkout uses an ignored `local_config.json` to switch the local default to `voice`.
+The active project profile defaults to `robot_chat`, because the shared codebase is primarily used for NAO-backed experiments. This checkout uses an ignored `local_config.json` to switch the local default to `computer_chat`.
 
-- `voice`: capture mic audio, transcribe locally, generate a reply through the shared `uq-neuro-nao` Py3 `/converse` path, and speak it on this machine
-- `robot`: capture mic audio and hand the turn off to the robot worker via session inbox/outbox files
+- `computer_chat`: capture mic audio, transcribe locally, generate a reply through the shared `uq-neuro-nao` Py3 `/converse` path, and speak it on this machine
+- `robot_chat`: capture mic audio and hand the turn off to the robot-side chat runner via session inbox/outbox files
 
-The shared conversation core is intentionally reused across both conditions to keep prompts, history handling, and turn structure aligned for experimental parity.
+The shared conversation core is intentionally reused across both pipelines to keep prompts, history handling, and turn structure aligned for experimental parity.
 
 ## Run
 
-Voice condition:
+Computer-chat pipeline:
 
 ```bash
 cd /Users/neurorobots/Desktop/repos/uq-neuro-nao
@@ -21,16 +21,16 @@ cd /Users/neurorobots/Desktop/repos/voice-llm-chat
 python3 gui.py
 ```
 
-Robot condition:
+Robot-chat pipeline:
 
 ```bash
-VOICE_LLM_CHAT_MODE=robot VOICE_LLM_CHAT_ROBOT_NAME=<robot-name> python3 gui.py
+VOICE_LLM_CHAT_MODE=robot_chat VOICE_LLM_CHAT_ROBOT_NAME=<robot-name> python3 gui.py
 ```
 
 Bridge server for robot control:
 
 ```bash
-VOICE_LLM_CHAT_MODE=robot VOICE_LLM_CHAT_ROBOT_NAME=<robot-name> python3 -m src.bridge_server
+VOICE_LLM_CHAT_MODE=robot_chat VOICE_LLM_CHAT_ROBOT_NAME=<robot-name> python3 -m src.bridge_server
 ```
 
 ## Configuration
@@ -44,11 +44,17 @@ Configuration precedence is:
 
 Built-in default:
 
-- `robot`
+- `computer_chat`
+
+Project profile sections:
+
+- `voice_client`: desktop participant app settings, including audio capture, session inbox/outbox names, and selected `chat_pipeline`
+- `computer_chat`: local computer-spoken reply settings
+- `robot_chat`: robot-side runner settings
 
 Useful environment variables:
 
-- `VOICE_LLM_CHAT_MODE=voice|robot`
+- `VOICE_LLM_CHAT_MODE=computer_chat|robot_chat`
 - `VOICE_LLM_CHAT_ROBOT_NAME=<robot-name>`
 - `VOICE_LLM_CHAT_UQ_PY3_API=http://127.0.0.1:5001`
 - `VOICE_LLM_CHAT_CONVERSE_MODEL=<model>`
@@ -65,19 +71,19 @@ This checkout currently uses `local_config.json` as a persistent local override:
 
 ```json
 {
-  "use_nao_backend": false,
+  "chat_pipeline": "computer_chat",
   "audio_input_name": "Scarlett Solo",
   "tts_voice": "Joelle (Enhanced)"
 }
 ```
 
-To switch this checkout back to the robot condition, either:
+To switch this checkout back to the robot-chat pipeline, either:
 
-- change `"use_nao_backend"` to `true` in `local_config.json`
-- delete `local_config.json` so the repo default (`robot`) applies again
+- change `"chat_pipeline"` to `"robot_chat"` in `local_config.json`
+- delete `local_config.json` so the active project profile default applies again
 
 To bypass the local override temporarily, use:
 
 ```bash
-VOICE_LLM_CHAT_MODE=robot python3 gui.py
+VOICE_LLM_CHAT_MODE=robot_chat python3 gui.py
 ```

@@ -12,8 +12,9 @@ from src.tts_engine import speak
 from config import (
     ensure_directories_exist,
     REQUIRE_ENTER_BEFORE_SPEAK,
-    USE_NAO_BACKEND,
-    WAIT_FOR_NAO_DONE,
+    REQUIRE_ENTER_FOR_WATCHDOG,
+    ROBOT_CHAT_ENABLED,
+    WAIT_FOR_ROBOT_DONE,
     WATCHDOG_ENABLED,
     WATCHDOG_ACTIVATE_AFTER_TURN,
     WATCHDOG_INTERVAL_SEC,
@@ -76,11 +77,11 @@ def _operator_reply_delay_sec(text):
 
 
 def gui():
-    validate_mode_settings(robot_enabled=USE_NAO_BACKEND)
-    convo = ConversationManager(robot_enabled=USE_NAO_BACKEND)
+    validate_mode_settings(robot_enabled=ROBOT_CHAT_ENABLED)
+    convo = ConversationManager(robot_enabled=ROBOT_CHAT_ENABLED)
     response_adapter = (
-        RobotResponseAdapter(wait_for_done=WAIT_FOR_NAO_DONE)
-        if USE_NAO_BACKEND
+        RobotResponseAdapter(wait_for_done=WAIT_FOR_ROBOT_DONE)
+        if ROBOT_CHAT_ENABLED
         else LocalResponseAdapter()
     )
     rec = Recorder()
@@ -183,7 +184,7 @@ def gui():
     ui_closing = False
 
     def local_watchdog_active():
-        return bool((not USE_NAO_BACKEND) and WATCHDOG_ENABLED)
+        return bool((not ROBOT_CHAT_ENABLED) and WATCHDOG_ENABLED)
 
     def release_operator_gate(event=None):
         nonlocal operator_gate_active, operator_gate_callback
@@ -199,7 +200,12 @@ def gui():
 
     def wait_for_operator_release(callback, reply_text=None, source_label="turn_reply"):
         nonlocal operator_gate_active, operator_gate_callback
-        if not REQUIRE_ENTER_BEFORE_SPEAK:
+        if source_label == "watchdog":
+            should_wait = REQUIRE_ENTER_FOR_WATCHDOG
+        else:
+            should_wait = REQUIRE_ENTER_BEFORE_SPEAK
+
+        if not should_wait:
             callback()
             return
 

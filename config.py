@@ -16,9 +16,9 @@ _DEFAULTS = {
     "SILENCE_RMS_THRESHOLD": 0.005,
     "ROBOT_OUTBOX_DIRNAME": "robot_outbox",
     "ROBOT_INBOX_DIRNAME": "robot_inbox",
-    "WAIT_FOR_NAO_DONE": True,
-    "NAO_DONE_TIMEOUT_SEC": 30.0,
-    "USE_NAO_BACKEND": False,
+    "WAIT_FOR_ROBOT_DONE": True,
+    "ROBOT_DONE_TIMEOUT_SEC": 30.0,
+    "CHAT_PIPELINE": "computer_chat",
     "COMPUTER": "macmini",
     "AUDIO_INPUT_NAME": "Scarlett Solo",
     "TTS_VOICE": "Joelle (Enhanced)",
@@ -75,10 +75,24 @@ def _parse_bool(value, default=None):
     return default
 
 
+def _parse_chat_pipeline(value, default=None):
+    if value is None:
+        return default
+
+    norm = str(value).strip().lower()
+    if norm == "robot_chat":
+        return "robot_chat"
+    if norm == "computer_chat":
+        return "computer_chat"
+    return default
+
+
 def _delay_cfg_value(key, default_key, cast=None, local_key=None):
     cfg = _LOCAL_CFG.get("operator_reply_delay")
     if not isinstance(cfg, dict):
-        cfg = _VOICE_CFG.get("operator_reply_delay")
+        cfg = _COMPUTER_CHAT_CFG.get("operator_reply_delay")
+    if not isinstance(cfg, dict):
+        cfg = _VOICE_CLIENT_CFG.get("operator_reply_delay")
     if not isinstance(cfg, dict):
         cfg = {}
 
@@ -144,8 +158,9 @@ def ensure_session_robot_dirs(session_dir):
 
 ACTIVE_PROJECT_ID = None
 _PROJECT_PROFILE = {}
-_VOICE_CFG = {}
-_NAO_CFG = {}
+_VOICE_CLIENT_CFG = {}
+_COMPUTER_CHAT_CFG = {}
+_ROBOT_CHAT_CFG = {}
 _RUNTIME_CFG = {}
 _CONVERSATION_CFG = {}
 _WATCHDOG_CFG = {}
@@ -155,16 +170,18 @@ if _parse_bool(os.getenv("VOICE_LLM_CHAT_DISABLE_UQ_PROFILE"), default=False):
 else:
     try:
         ACTIVE_PROJECT_ID, _PROJECT_PROFILE = _load_project_profile()
-        _VOICE_CFG = _PROJECT_PROFILE.get("voice_llm_chat") or {}
-        _NAO_CFG = _PROJECT_PROFILE.get("nao_worker") or {}
+        _VOICE_CLIENT_CFG = _PROJECT_PROFILE.get("voice_client") or {}
+        _COMPUTER_CHAT_CFG = _PROJECT_PROFILE.get("computer_chat") or {}
+        _ROBOT_CHAT_CFG = _PROJECT_PROFILE.get("robot_chat") or {}
         _RUNTIME_CFG = _PROJECT_PROFILE.get("runtime") or {}
         _CONVERSATION_CFG = _PROJECT_PROFILE.get("conversation") or {}
         _WATCHDOG_CFG = _CONVERSATION_CFG.get("watchdog") or {}
     except Exception as e:
         ACTIVE_PROJECT_ID = "defaults"
         _PROJECT_PROFILE = {}
-        _VOICE_CFG = {}
-        _NAO_CFG = {}
+        _VOICE_CLIENT_CFG = {}
+        _COMPUTER_CHAT_CFG = {}
+        _ROBOT_CHAT_CFG = {}
         _RUNTIME_CFG = {}
         _CONVERSATION_CFG = {}
         _WATCHDOG_CFG = {}
@@ -184,8 +201,12 @@ def _pick(key, local_key=None, env_key=None, default_key=None, cast=None):
         value = _LOCAL_CFG[lookup_key]
         return cast(value) if cast else value
 
-    if key in _VOICE_CFG:
-        value = _VOICE_CFG[key]
+    if key in _VOICE_CLIENT_CFG:
+        value = _VOICE_CLIENT_CFG[key]
+        return cast(value) if cast else value
+
+    if key in _COMPUTER_CHAT_CFG:
+        value = _COMPUTER_CHAT_CFG[key]
         return cast(value) if cast else value
 
     value = _DEFAULTS[default_key or key]
@@ -231,34 +252,38 @@ ROBOT_INBOX_DIRNAME = _pick(
     env_key="VOICE_LLM_CHAT_ROBOT_INBOX_DIRNAME",
     default_key="ROBOT_INBOX_DIRNAME",
 )
-WAIT_FOR_NAO_DONE = _pick(
-    "wait_for_nao_done",
-    env_key="VOICE_LLM_CHAT_WAIT_FOR_NAO_DONE",
-    default_key="WAIT_FOR_NAO_DONE",
-    cast=lambda v: _parse_bool(v, _DEFAULTS["WAIT_FOR_NAO_DONE"]),
+WAIT_FOR_ROBOT_DONE = _pick(
+    "wait_for_robot_done",
+    env_key="VOICE_LLM_CHAT_WAIT_FOR_ROBOT_DONE",
+    default_key="WAIT_FOR_ROBOT_DONE",
+    cast=lambda v: _parse_bool(v, _DEFAULTS["WAIT_FOR_ROBOT_DONE"]),
 )
-NAO_DONE_TIMEOUT_SEC = _pick(
-    "nao_done_timeout_sec",
-    env_key="VOICE_LLM_CHAT_NAO_DONE_TIMEOUT_SEC",
-    default_key="NAO_DONE_TIMEOUT_SEC",
+ROBOT_DONE_TIMEOUT_SEC = _pick(
+    "robot_done_timeout_sec",
+    env_key="VOICE_LLM_CHAT_ROBOT_DONE_TIMEOUT_SEC",
+    default_key="ROBOT_DONE_TIMEOUT_SEC",
     cast=float,
 )
 
 mode_override = os.getenv("VOICE_LLM_CHAT_MODE")
 if mode_override:
-    USE_NAO_BACKEND = _parse_bool(mode_override, _DEFAULTS["USE_NAO_BACKEND"])
+    CHAT_PIPELINE = _parse_chat_pipeline(mode_override, _DEFAULTS["CHAT_PIPELINE"])
 else:
-    USE_NAO_BACKEND = _pick(
-        "use_nao_backend",
-        env_key="VOICE_LLM_CHAT_USE_NAO_BACKEND",
-        default_key="USE_NAO_BACKEND",
-        cast=lambda v: _parse_bool(v, _DEFAULTS["USE_NAO_BACKEND"]),
+    CHAT_PIPELINE = _pick(
+        "chat_pipeline",
+        env_key="VOICE_LLM_CHAT_PIPELINE",
+        default_key="CHAT_PIPELINE",
+        cast=lambda v: _parse_chat_pipeline(v, _DEFAULTS["CHAT_PIPELINE"]),
     )
 
-DEFAULT_ROBOT_NAME = os.getenv("VOICE_LLM_CHAT_ROBOT_NAME") or _LOCAL_CFG.get("robot_name") or _NAO_CFG.get("robot_name")
-ROBOT_ENABLED = bool(USE_NAO_BACKEND)
+DEFAULT_ROBOT_NAME = (
+    os.getenv("VOICE_LLM_CHAT_ROBOT_NAME")
+    or _LOCAL_CFG.get("robot_name")
+    or _ROBOT_CHAT_CFG.get("robot_name")
+)
+ROBOT_CHAT_ENABLED = CHAT_PIPELINE == "robot_chat"
 ROBOT_CONFIGURED = bool(DEFAULT_ROBOT_NAME)
-CONDITION = "robot" if ROBOT_ENABLED else "voice"
+CONDITION = "robot" if ROBOT_CHAT_ENABLED else "computer"
 
 COMPUTER = _pick("computer", env_key="VOICE_LLM_CHAT_COMPUTER", default_key="COMPUTER")
 AUDIO_INPUT_NAME = _pick(
@@ -270,13 +295,19 @@ TTS_VOICE = _pick("tts_voice", env_key="VOICE_LLM_CHAT_TTS_VOICE", default_key="
 REQUIRE_ENTER_BEFORE_SPEAK = bool(
     _parse_bool(
         os.getenv("VOICE_LLM_CHAT_REQUIRE_ENTER_BEFORE_SPEAK"),
-        _parse_bool(_NAO_CFG.get("require_enter_before_speak"), False),
+        _parse_bool(_COMPUTER_CHAT_CFG.get("require_enter_before_speak"), False),
+    )
+)
+REQUIRE_ENTER_FOR_WATCHDOG = bool(
+    _parse_bool(
+        os.getenv("VOICE_LLM_CHAT_REQUIRE_ENTER_FOR_WATCHDOG"),
+        _parse_bool(_COMPUTER_CHAT_CFG.get("require_enter_for_watchdog"), False),
     )
 )
 CONVERSE_INTERLOCUTOR = (
     os.getenv("VOICE_LLM_CHAT_CONVERSE_INTERLOCUTOR")
     or _LOCAL_CFG.get("converse_interlocutor")
-    or _VOICE_CFG.get("converse_interlocutor")
+    or _COMPUTER_CHAT_CFG.get("converse_interlocutor")
     or _CONVERSATION_CFG.get("default_interlocutor")
     or _DEFAULTS["CONVERSE_INTERLOCUTOR"]
 )
@@ -296,7 +327,7 @@ UQ_PY3_API_BASE = (
 CONVERSE_MODEL = (
     os.getenv("VOICE_LLM_CHAT_CONVERSE_MODEL")
     or _LOCAL_CFG.get("converse_model")
-    or _VOICE_CFG.get("converse_model")
+    or _COMPUTER_CHAT_CFG.get("converse_model")
     or _RUNTIME_CFG.get("default_converse_model")
     or _DEFAULTS["CONVERSE_MODEL"]
 )
@@ -361,11 +392,11 @@ OPERATOR_REPLY_DELAY_MAX_SEC = float(
 
 def validate_mode_settings(robot_enabled=None):
     if robot_enabled is None:
-        robot_enabled = ROBOT_ENABLED
+        robot_enabled = ROBOT_CHAT_ENABLED
 
     if robot_enabled and not ROBOT_CONFIGURED:
         raise RuntimeError(
             "Robot mode is enabled but no robot name is configured. "
             "Set VOICE_LLM_CHAT_ROBOT_NAME, add robot_name to local_config.json, "
-            "or load a uq-neuro-nao project profile with nao_worker.robot_name."
+            "or load a uq-neuro-nao project profile with robot_chat.robot_name."
         )

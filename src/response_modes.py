@@ -61,9 +61,9 @@ class RobotResponseAdapter(ResponseAdapter):
             return "(sent to robot)", None
 
         try:
-            done = convo.wait_for_nao_done(turn_id)
+            done = convo.wait_for_robot_done(turn_id)
         except Exception as e:
-            exc(TAG_ROBOT, e, msg="wait_for_nao_done failed")
+            exc(TAG_ROBOT, e, msg="wait_for_robot_done failed")
             done = None
 
         if done and done.get("ok"):
