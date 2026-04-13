@@ -34,6 +34,10 @@ _DEFAULTS = {
         "The participant has not spoken recently. Re-engage with one short, warm, "
         "context-aware line. Do not mention silence, timing, or that this is a watchdog prompt."
     ),
+    "OPERATOR_REPLY_DELAY_ENABLED": False,
+    "OPERATOR_REPLY_DELAY_CPM": 240.0,
+    "OPERATOR_REPLY_DELAY_MIN_SEC": 1.0,
+    "OPERATOR_REPLY_DELAY_MAX_SEC": 12.0,
 }
 
 
@@ -69,6 +73,23 @@ def _parse_bool(value, default=None):
     if norm in ("0", "false", "no", "off", "local", "voice"):
         return False
     return default
+
+
+def _delay_cfg_value(key, default_key, cast=None, local_key=None):
+    cfg = _LOCAL_CFG.get("operator_reply_delay")
+    if not isinstance(cfg, dict):
+        cfg = _VOICE_CFG.get("operator_reply_delay")
+    if not isinstance(cfg, dict):
+        cfg = {}
+
+    if (local_key or key) in _LOCAL_CFG:
+        value = _LOCAL_CFG[local_key or key]
+    elif key in cfg:
+        value = cfg[key]
+    else:
+        value = _DEFAULTS[default_key]
+
+    return cast(value) if cast else value
 
 
 def _optional_json(path):
@@ -311,6 +332,30 @@ WATCHDOG_EPHEMERAL_SYSTEM_PROMPT = (
     or _LOCAL_CFG.get("watchdog_ephemeral_system_prompt")
     or _WATCHDOG_CFG.get("ephemeral_system_prompt")
     or _DEFAULTS["WATCHDOG_EPHEMERAL_SYSTEM_PROMPT"]
+)
+
+OPERATOR_REPLY_DELAY_ENABLED = _parse_bool(
+    os.getenv("VOICE_LLM_CHAT_OPERATOR_REPLY_DELAY_ENABLED"),
+    _parse_bool(
+        _delay_cfg_value(
+            "enabled",
+            "OPERATOR_REPLY_DELAY_ENABLED",
+            local_key="operator_reply_delay_enabled",
+        ),
+        _DEFAULTS["OPERATOR_REPLY_DELAY_ENABLED"],
+    ),
+)
+OPERATOR_REPLY_DELAY_CPM = float(
+    os.getenv("VOICE_LLM_CHAT_OPERATOR_REPLY_DELAY_CPM")
+    or _delay_cfg_value("characters_per_minute", "OPERATOR_REPLY_DELAY_CPM")
+)
+OPERATOR_REPLY_DELAY_MIN_SEC = float(
+    os.getenv("VOICE_LLM_CHAT_OPERATOR_REPLY_DELAY_MIN_SEC")
+    or _delay_cfg_value("min_sec", "OPERATOR_REPLY_DELAY_MIN_SEC")
+)
+OPERATOR_REPLY_DELAY_MAX_SEC = float(
+    os.getenv("VOICE_LLM_CHAT_OPERATOR_REPLY_DELAY_MAX_SEC")
+    or _delay_cfg_value("max_sec", "OPERATOR_REPLY_DELAY_MAX_SEC")
 )
 
 

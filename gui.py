@@ -19,6 +19,10 @@ from config import (
     WATCHDOG_INTERVAL_SEC,
     WATCHDOG_MAX_CONSECUTIVE_WITHOUT_USER,
     WATCHDOG_EPHEMERAL_SYSTEM_PROMPT,
+    OPERATOR_REPLY_DELAY_ENABLED,
+    OPERATOR_REPLY_DELAY_CPM,
+    OPERATOR_REPLY_DELAY_MIN_SEC,
+    OPERATOR_REPLY_DELAY_MAX_SEC,
     validate_mode_settings,
 )
 
@@ -49,6 +53,26 @@ def _env_bool(name, default):
         return default
 
     return raw_value.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _operator_reply_delay_sec(text):
+    if not OPERATOR_REPLY_DELAY_ENABLED:
+        return None
+    try:
+        cpm = float(OPERATOR_REPLY_DELAY_CPM)
+    except Exception:
+        cpm = 0.0
+    if cpm <= 0:
+        return None
+
+    char_count = len(str(text or "").strip())
+    if char_count <= 0:
+        return 0.0
+
+    delay = (float(char_count) / cpm) * 60.0
+    delay = max(float(OPERATOR_REPLY_DELAY_MIN_SEC), delay)
+    delay = min(float(OPERATOR_REPLY_DELAY_MAX_SEC), delay)
+    return max(0.0, delay)
 
 
 def gui():
@@ -173,11 +197,22 @@ def gui():
         if callback is not None:
             callback()
 
-    def wait_for_operator_release(callback):
+    def wait_for_operator_release(callback, reply_text=None, source_label="turn_reply"):
         nonlocal operator_gate_active, operator_gate_callback
         if not REQUIRE_ENTER_BEFORE_SPEAK:
             callback()
             return
+
+        if source_label == "turn_reply":
+            delay_sec = _operator_reply_delay_sec(reply_text)
+            if delay_sec is not None:
+                set_status("Processing…", "blue")
+                print(
+                    "[operator_gate] Reply is ready. Auto-releasing normal reply "
+                    "after {:.3f}s typing delay.".format(delay_sec)
+                )
+                root.after(max(1, int(delay_sec * 1000)), callback)
+                return
 
         operator_gate_active = True
         operator_gate_callback = callback
@@ -285,7 +320,11 @@ def gui():
                 daemon=True,
             ).start()
 
-        wait_for_operator_release(start_local_watchdog_audio)
+        wait_for_operator_release(
+            start_local_watchdog_audio,
+            reply_text=reply,
+            source_label="watchdog",
+        )
 
     def fire_local_watchdog():
         nonlocal local_watchdog_after_id, local_watchdog_in_flight
@@ -407,7 +446,11 @@ def gui():
             threading.Thread(target=completion_worker, daemon=True).start()
 
         if outpath:
-            wait_for_operator_release(start_completion)
+            wait_for_operator_release(
+                start_completion,
+                reply_text=reply,
+                source_label="turn_reply",
+            )
         else:
             start_completion()
 
