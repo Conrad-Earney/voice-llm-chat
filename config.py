@@ -6,8 +6,6 @@ import os
 REQUIRED_DIRS = ["sessions"]
 
 _DEFAULTS = {
-    "OLLAMA_MODEL": "gesturizer4",
-    "OLLAMA_URL": "http://localhost:11434",
     "WHISPER_MODEL": "base.en",
     "SAMPLE_RATE": 16000,
     "CONNECT_TIMEOUT_SEC": 3.0,
@@ -213,8 +211,6 @@ def _pick(key, local_key=None, env_key=None, default_key=None, cast=None):
     return cast(value) if cast else value
 
 
-OLLAMA_MODEL = _pick("ollama_model", env_key="VOICE_LLM_CHAT_OLLAMA_MODEL", default_key="OLLAMA_MODEL")
-OLLAMA_URL = _pick("ollama_url", env_key="VOICE_LLM_CHAT_OLLAMA_URL", default_key="OLLAMA_URL")
 WHISPER_MODEL = _pick("whisper_model", env_key="VOICE_LLM_CHAT_WHISPER_MODEL", default_key="WHISPER_MODEL")
 SAMPLE_RATE = _pick("sample_rate", env_key="VOICE_LLM_CHAT_SAMPLE_RATE", default_key="SAMPLE_RATE", cast=int)
 CONNECT_TIMEOUT_SEC = _pick(
@@ -324,13 +320,7 @@ UQ_PY3_API_BASE = (
     )
     or _DEFAULTS["UQ_PY3_API_BASE"]
 )
-CONVERSE_MODEL = (
-    os.getenv("VOICE_LLM_CHAT_CONVERSE_MODEL")
-    or _LOCAL_CFG.get("converse_model")
-    or _COMPUTER_CHAT_CFG.get("converse_model")
-    or _RUNTIME_CFG.get("default_converse_model")
-    or _DEFAULTS["CONVERSE_MODEL"]
-)
+CONVERSE_MODEL = _RUNTIME_CFG.get("default_converse_model") or _DEFAULTS["CONVERSE_MODEL"]
 
 WATCHDOG_ENABLED = _parse_bool(
     os.getenv("VOICE_LLM_CHAT_WATCHDOG_ENABLED"),

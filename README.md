@@ -57,7 +57,6 @@ Useful environment variables:
 - `VOICE_LLM_CHAT_MODE=computer_chat|robot_chat`
 - `VOICE_LLM_CHAT_ROBOT_NAME=<robot-name>`
 - `VOICE_LLM_CHAT_UQ_PY3_API=http://127.0.0.1:5001`
-- `VOICE_LLM_CHAT_CONVERSE_MODEL=<model>`
 - `VOICE_LLM_CHAT_CONVERSE_INTERLOCUTOR=<name>`
 - `VOICE_LLM_CHAT_AUDIO_INPUT_NAME=<device-name>`
 - `VOICE_LLM_CHAT_TTS_VOICE=<macOS say voice>`
