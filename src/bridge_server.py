@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 import threading
 import logging
 import os
+import json
 from datetime import datetime
 
 from config import validate_mode_settings
@@ -21,16 +22,38 @@ _lock = threading.Lock()
 _is_listening = False
 _recording_started_at = None
 
+
+def _now_iso():
+    return datetime.now().isoformat(timespec="milliseconds")
+
+
+def _write_bridge_event(payload):
+    try:
+        event = dict(payload or {})
+        event.setdefault("ts", _now_iso())
+        event_path = os.path.join(convo.session_dir, "bridge_events.jsonl")
+        with open(event_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
+    except Exception as e:
+        exc(TAG, e, "Failed to write bridge event")
+
+
 @app.post("/start")
 def start():
     global _is_listening, _recording_started_at
     with _lock:
         if _is_listening:
+            _write_bridge_event({"event": "start_already_listening"})
             return jsonify({"ok": True, "already": True})
         _is_listening = True
-        _recording_started_at = datetime.now().isoformat(timespec="milliseconds")
+        _recording_started_at = _now_iso()
         rec.start()
     debug(TAG, "Recording started via /start")
+    _write_bridge_event({
+        "event": "recording_started",
+        "recording_started_at": _recording_started_at,
+        "session_dir": convo.session_dir,
+    })
     return jsonify({"ok": True})
 
 @app.post("/stop")
@@ -38,6 +61,7 @@ def stop():
     global _is_listening, _recording_started_at
     with _lock:
         if not _is_listening:
+            _write_bridge_event({"event": "stop_not_listening"})
             return jsonify({"ok": False, "error": "not_listening"}), 400
         _is_listening = False
         recording_started_at = _recording_started_at
@@ -45,6 +69,17 @@ def stop():
 
     audio = rec.stop()
     turn_id, text = convo.transcribe_only(audio, recording_started_at=recording_started_at)  # writes the input job to outbox already
+    _write_bridge_event({
+        "event": "recording_stopped",
+        "recording_started_at": recording_started_at,
+        "recording_stopped_at": _now_iso(),
+        "turn_id": int(turn_id),
+        "transcript_nonempty": bool((text or "").strip()),
+        "transcript": text or "",
+        "session_dir": convo.session_dir,
+        "to_robot_dir": convo.to_robot_dir,
+        "from_robot_dir": convo.from_robot_dir,
+    })
 
     return jsonify({
     "ok": True,
